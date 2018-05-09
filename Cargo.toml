@@ -1,0 +1,6 @@
+[package]
+name = "rk"
+version = "0.1.0"
+authors = ["Kamil Cholewiński <harry666t@gmail.com>"]
+
+[dependencies]
