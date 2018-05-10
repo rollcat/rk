@@ -22,8 +22,8 @@ struct Editor {
 impl Editor {
     fn new(term: Terminal) -> Editor {
         Editor {
-            cx: 1,
-            cy: 1,
+            cx: 0,
+            cy: 0,
             term: term,
         }
     }
@@ -43,10 +43,12 @@ impl Editor {
         self.term.move_cursor_topleft()?;
         for _y in 1..self.term.wy {
             self.term.clear_line()?;
-            self.term.write(b"~\r\n")?;
+            let line = "~";
+            self.term.write(line.as_bytes())?;
+            self.term.write(b"\r\n")?;
         }
         self.term.write(status.as_bytes())?;
-        self.term.move_cursor_topleft()?;
+        self.term.move_cursor(self.cx, self.cy)?;
         self.term.show_cursor()?;
         self.term.flush()?;
         Ok(())
@@ -117,6 +119,11 @@ impl Terminal {
 
     fn move_cursor_topleft(&mut self) -> io::Result<()> {
         self.write(b"\x1b[H")?;
+        Ok(())
+    }
+
+    fn move_cursor(&mut self, x: u16, y: u16) -> io::Result<()> {
+        self.write(format!("\x1b[{};{}H", y + 1, x + 1).as_bytes())?;
         Ok(())
     }
 
@@ -261,7 +268,34 @@ fn main() {
                 e.refresh_screen().expect("refresh_screen");
                 break;
             }
-            Command::KeyPress { ch: _ } => {
+            Command::KeyPress { ch } => {
+                match ch as char {
+                    'h' => {
+                        if e.cx > 0 {
+                            e.cx -= 1
+                        }
+                    }
+                    'l' => {
+                        if e.cx < e.term.wx - 1 {
+                            e.cx += 1
+                        }
+                    }
+                    'k' => {
+                        if e.cy > 0 {
+                            e.cy -= 1
+                        }
+                    }
+                    'j' => {
+                        if e.cy < e.term.wy - 1 {
+                            e.cy += 1
+                        }
+                    }
+                    ':' => {
+                        e.cy = e.term.wy;
+                        e.cx = 2;
+                    }
+                    _ => (),
+                }
                 e.refresh_screen().expect("refresh_screen");
             }
         }
