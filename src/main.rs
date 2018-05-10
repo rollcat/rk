@@ -29,11 +29,19 @@ impl Editor {
     }
 
     fn process_input(&mut self) -> io::Result<Command> {
-        let ch = self.term.get_key()?;
-        Ok(match ch {
-            /* wait  */ 0x00 => Command::Nothing,
-            /* C-q   */ 0x11 => Command::Exit,
-            /* other */ _ => Command::KeyPress { ch: ch },
+        let k = self.term.get_key()?;
+        Ok(match k {
+            Key {
+                ch: '\0',
+                ctrl: false,
+                meta: false,
+            } => Command::Nothing,
+            Key {
+                ch: 'q',
+                ctrl: true,
+                meta: false,
+            } => Command::Exit,
+            _ => Command::KeyPress { key: k },
         })
     }
 
@@ -58,7 +66,7 @@ impl Editor {
 #[derive(Debug)]
 enum Command {
     Nothing,
-    KeyPress { ch: u8 },
+    KeyPress { key: Key },
     Exit,
 }
 
@@ -113,8 +121,9 @@ impl Terminal {
         Ok(())
     }
 
-    fn get_key(&mut self) -> io::Result<u8> {
-        read_char(&mut self.stdin)
+    fn get_key(&mut self) -> io::Result<Key> {
+        let ch = read_char(&mut self.stdin)?;
+        Ok(Key::new(ch))
     }
 
     fn move_cursor_topleft(&mut self) -> io::Result<()> {
@@ -244,6 +253,43 @@ impl fmt::Debug for Terminal {
     }
 }
 
+struct Key {
+    ch: char,
+    ctrl: bool,
+    meta: bool,
+}
+
+impl Key {
+    fn new(i: u8) -> Key {
+        if i < 0x20 {
+            Key {
+                ch: (i + 0x60) as char,
+                ctrl: true,
+                meta: false,
+            }
+        } else {
+            Key {
+                ch: i as char,
+                ctrl: false,
+                meta: false,
+            }
+        }
+    }
+}
+
+impl fmt::Debug for Key {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Key <")?;
+        if self.ctrl {
+            write!(f, "C-")?;
+        }
+        if self.meta {
+            write!(f, "M-")?;
+        }
+        write!(f, "{}>", self.ch)
+    }
+}
+
 fn read_char(reader: &mut io::Read) -> io::Result<u8> {
     let mut buffer = [0; 1];
     reader.read(&mut buffer)?;
@@ -268,8 +314,8 @@ fn main() {
                 e.refresh_screen().expect("refresh_screen");
                 break;
             }
-            Command::KeyPress { ch } => {
-                match ch as char {
+            Command::KeyPress { key } => {
+                match key.ch {
                     'h' => {
                         if e.cx > 0 {
                             e.cx -= 1
