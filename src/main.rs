@@ -53,6 +53,14 @@ enum Command {
     Exit,
 }
 
+enum DeviceStatusQuery {
+    WindowSize,
+}
+
+enum DeviceStatusResponse {
+    WindowSize(libc::winsize),
+}
+
 #[derive(Debug)]
 struct Terminal {
     stdin: Box<io::Stdin>,
@@ -116,36 +124,51 @@ impl Terminal {
         Ok(())
     }
 
-    fn device_status_report(&mut self, cmd: &[u8], out: &mut [u8]) -> io::Result<()> {
-        self.stdout.write(cmd)?;
-        self.stdout.flush()?;
-        let _n = self.stdin.read(out)?;
-        Ok(())
+    fn device_status_report(&mut self, q: DeviceStatusQuery) -> io::Result<DeviceStatusResponse> {
+        match q {
+            DeviceStatusQuery::WindowSize => {
+                self.stdout.write(b"\x1b[6n")?;
+                self.stdout.flush()?;
+
+                let mut out: [u8; 32] = [0; 32];
+                self.stdin.read(&mut out)?;
+                // TODO: this is too simple for regex but I'm too lazy
+                let re = regex::Regex::new(
+                    r"(?x)
+                    \x1b\[
+                    (?P<r>\d{1,4});
+                    (?P<c>\d+)R",
+                ).unwrap();
+                let e = io::Error::new(io::ErrorKind::Other, "can't parse response");
+                match std::str::from_utf8(&out) {
+                    Ok(s) => match re.captures(s) {
+                        Some(m) => Ok(DeviceStatusResponse::WindowSize(libc::winsize {
+                            ws_col: m["c"].parse::<u16>().unwrap(),
+                            ws_row: m["r"].parse::<u16>().unwrap(),
+                            ws_xpixel: 0,
+                            ws_ypixel: 0,
+                        })),
+                        None => Err(e),
+                    },
+                    Err(_) => Err(e),
+                }
+            }
+        }
     }
 
     fn update_window_size_dsr(&mut self) -> io::Result<()> {
         // move cursor to bottom right corner and read position
         self.move_cursor_offscreen()?;
-        let mut out: [u8; 32] = [0; 32];
-        self.device_status_report(b"\x1b[6n", &mut out)?;
-        // TODO: this is too simple for regex but I'm too lazy
-        let re = regex::Regex::new(
-            r"(?x)
-            \x1b\[
-            (?P<r>\d{1,4});
-            (?P<c>\d+)R",
-        ).unwrap();
-        match std::str::from_utf8(&out) {
-            Ok(s) => match re.captures(s) {
-                Some(m) => {
-                    self.wx = m["r"].parse::<u16>().unwrap();
-                    self.wy = m["c"].parse::<u16>().unwrap();
+        match self.device_status_report(DeviceStatusQuery::WindowSize) {
+            Ok(ds) => match ds {
+                DeviceStatusResponse::WindowSize(ws) => {
+                    self.wx = ws.ws_col;
+                    self.wy = ws.ws_row;
+                    Ok(())
                 }
-                _ => (),
             },
-            _ => (),
+            _ => Ok(()),
         }
-        Ok(())
     }
 
     fn update_window_size_ioctl(&mut self) -> io::Result<()> {
