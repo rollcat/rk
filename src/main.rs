@@ -36,13 +36,15 @@ impl Editor {
     }
 
     fn refresh_screen(&mut self) -> io::Result<()> {
-        self.term.clear_screen()?;
+        self.term.hide_cursor()?;
         self.term.move_cursor_topleft()?;
         for _y in 1..self.term.wy {
+            self.term.clear_line()?;
             self.term.write(b"~\r\n")?;
         }
         self.term.write(b"~")?;
         self.term.move_cursor_topleft()?;
+        self.term.show_cursor()?;
         self.term.flush()?;
         Ok(())
     }
@@ -117,6 +119,11 @@ impl Terminal {
 
     fn clear_screen(&mut self) -> io::Result<()> {
         self.write(b"\x1b[2J")?;
+        Ok(())
+    }
+
+    fn clear_line(&mut self) -> io::Result<()> {
+        self.write(b"\x1b[K")?;
         Ok(())
     }
 
@@ -196,6 +203,16 @@ impl Terminal {
             Err(_) => self.update_window_size_dsr(),
         }
     }
+
+    fn hide_cursor(&mut self) -> io::Result<()> {
+        self.write(b"\x1b[?25l")?;
+        Ok(())
+    }
+
+    fn show_cursor(&mut self) -> io::Result<()> {
+        self.write(b"\x1b[?25h")?;
+        Ok(())
+    }
 }
 
 impl Write for Terminal {
@@ -229,6 +246,7 @@ fn main() {
     let mut e = Editor::new(t);
 
     e.term.enable_raw_mode().expect("could not enable raw mode");
+    e.term.clear_screen().expect("clear_screen");
     e.refresh_screen().expect("refresh_screen");
     loop {
         e.term.update_window_size().expect("update_window_size");
