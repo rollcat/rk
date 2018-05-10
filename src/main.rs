@@ -246,11 +246,12 @@ fn main() {
     let mut e = Editor::new(t);
 
     e.term.enable_raw_mode().expect("could not enable raw mode");
+    e.term.update_window_size().expect("update_window_size");
     e.term.clear_screen().expect("clear_screen");
     e.refresh_screen().expect("refresh_screen");
     loop {
-        e.term.update_window_size().expect("update_window_size");
         let cmd = e.process_input().expect("process_input");
+        e.term.update_window_size().expect("update_window_size");
         match cmd {
             Command::Nothing => continue,
             Command::Exit => {
