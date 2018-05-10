@@ -9,6 +9,8 @@ use std::os::unix::io::AsRawFd;
 
 use termios::*;
 
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug)]
 struct Editor {
     cx: u16,
@@ -36,13 +38,14 @@ impl Editor {
     }
 
     fn refresh_screen(&mut self) -> io::Result<()> {
+        let status = format!("? ~~  rk v{}  ~~", VERSION);
         self.term.hide_cursor()?;
         self.term.move_cursor_topleft()?;
         for _y in 1..self.term.wy {
             self.term.clear_line()?;
             self.term.write(b"~\r\n")?;
         }
-        self.term.write(b"~")?;
+        self.term.write(status.as_bytes())?;
         self.term.move_cursor_topleft()?;
         self.term.show_cursor()?;
         self.term.flush()?;
