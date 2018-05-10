@@ -2,7 +2,6 @@ extern crate termios;
 
 use std::env;
 use std::io;
-use std::os::unix::io::RawFd;
 use std::os::unix::io::AsRawFd;
 
 use termios::*;
@@ -15,21 +14,22 @@ struct Editor {
 
 #[derive(Debug)]
 struct Terminal {
-    fd: RawFd,
+    stdin: Box<io::Stdin>,
     orig_termios: Option<Termios>,
 }
 
 impl Terminal {
-    fn new(fd: RawFd) -> Terminal {
+    fn new(stdin: io::Stdin) -> Terminal {
         Terminal {
-            fd: fd,
+            stdin: Box::new(stdin),
             orig_termios: Option::None,
         }
     }
 
     fn enable_raw_mode(&mut self) -> io::Result<()> {
-        let mut termios = Termios::from_fd(self.fd)?;
-        tcgetattr(self.fd, &mut termios)?;
+        let fd = self.stdin.as_raw_fd();
+        let mut termios = Termios::from_fd(fd)?;
+        tcgetattr(fd, &mut termios)?;
         self.orig_termios = Some(termios);
         termios.c_iflag &= !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
         termios.c_oflag &= !(OPOST);
@@ -37,39 +37,43 @@ impl Terminal {
         termios.c_lflag &= !(ECHO | ICANON | IEXTEN | ISIG);
         termios.c_cc[VMIN] = 0;
         termios.c_cc[VTIME] = 1;
-        tcsetattr(self.fd, TCSAFLUSH, &termios)?;
+        tcsetattr(fd, TCSAFLUSH, &termios)?;
         Ok(())
     }
 
     fn disable_raw_mode(&self) -> io::Result<()> {
+        let fd = self.stdin.as_raw_fd();
         match self.orig_termios {
-            Some(termios) => tcsetattr(self.fd, TCSAFLUSH, &termios)?,
+            Some(termios) => tcsetattr(fd, TCSAFLUSH, &termios)?,
             None => (),
         }
         Ok(())
     }
+
+    fn get_key(&mut self) -> io::Result<u8> {
+        read_char(&mut self.stdin)
+    }
 }
 
-fn read_char(fd: &mut io::Read) -> io::Result<u8> {
+fn read_char(reader: &mut io::Read) -> io::Result<u8> {
     let mut buffer = [0; 1];
-    fd.read(&mut buffer)?;
+    reader.read(&mut buffer)?;
     Ok(buffer[0])
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let mut stdin = io::stdin();
-    let mut t = Terminal::new(stdin.as_raw_fd());
+    let mut t = Terminal::new(io::stdin());
 
     println!("args: {:?}", args);
     println!("t: {:?}", t);
 
     t.enable_raw_mode().expect("could not enable raw mode");
     loop {
-        let ch = read_char(&mut stdin).expect("could not read char");
+        let ch = t.get_key().expect("get_key");
         match ch {
-            0 => (),
-            0x11 => break, // C-q
+            /* wait */ 0x00 => (),
+            /* C-q  */ 0x11 => break,
             _ => print!("ch: {:?}\r\n", ch),
         }
     }
