@@ -83,7 +83,7 @@ impl Terminal {
         termios.c_cflag |= CS8;
         termios.c_lflag &= !(ECHO | ICANON | IEXTEN | ISIG);
         termios.c_cc[VMIN] = 0;
-        termios.c_cc[VTIME] = 1;
+        termios.c_cc[VTIME] = 10;
         tcsetattr(fd, TCSAFLUSH, &termios)?;
         Ok(())
     }
