@@ -1,8 +1,9 @@
 extern crate libc;
+extern crate regex;
 extern crate termios;
 
 use std::env;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::os::unix::io::AsRawFd;
 
 use termios::*;
@@ -34,21 +35,18 @@ impl Editor {
     }
 
     fn refresh_screen(&mut self) -> io::Result<()> {
-        self.term.stdout.write(b"\x1b[2J")?;
-        self.term.stdout.write(b"\x1b[H")?;
-        self.draw_rows()?;
-        self.term.stdout.write(b"\x1b[H")?;
-        Ok(())
-    }
-
-    fn draw_rows(&mut self) -> io::Result<()> {
+        self.term.clear_screen()?;
+        self.term.move_cursor_topleft()?;
         for _y in 1..self.term.wy {
             self.term.stdout.write(b"~\r\n")?;
         }
+        self.term.move_cursor_topleft()?;
+        self.term.stdout.flush()?;
         Ok(())
     }
 }
 
+#[derive(Debug)]
 enum Command {
     Nothing,
     KeyPress { ch: u8 },
@@ -103,7 +101,54 @@ impl Terminal {
         read_char(&mut self.stdin)
     }
 
-    fn update_window_size(&mut self) -> io::Result<()> {
+    fn move_cursor_topleft(&mut self) -> io::Result<()> {
+        self.stdout.write(b"\x1b[H")?;
+        Ok(())
+    }
+
+    fn clear_screen(&mut self) -> io::Result<()> {
+        self.stdout.write(b"\x1b[2J")?;
+        Ok(())
+    }
+
+    fn move_cursor_offscreen(&mut self) -> io::Result<()> {
+        self.stdout.write(b"\x1b[999C\x1b[999B")?;
+        Ok(())
+    }
+
+    fn device_status_report(&mut self, cmd: &[u8], out: &mut [u8]) -> io::Result<()> {
+        self.stdout.write(cmd)?;
+        self.stdout.flush()?;
+        let _n = self.stdin.read(out)?;
+        Ok(())
+    }
+
+    fn update_window_size_dsr(&mut self) -> io::Result<()> {
+        // move cursor to bottom right corner and read position
+        self.move_cursor_offscreen()?;
+        let mut out: [u8; 32] = [0; 32];
+        self.device_status_report(b"\x1b[6n", &mut out)?;
+        // TODO: this is too simple for regex but I'm too lazy
+        let re = regex::Regex::new(
+            r"(?x)
+            \x1b\[
+            (?P<r>\d{1,4});
+            (?P<c>\d+)R",
+        ).unwrap();
+        match std::str::from_utf8(&out) {
+            Ok(s) => match re.captures(s) {
+                Some(m) => {
+                    self.wx = m["r"].parse::<u16>().unwrap();
+                    self.wy = m["c"].parse::<u16>().unwrap();
+                }
+                _ => (),
+            },
+            _ => (),
+        }
+        Ok(())
+    }
+
+    fn update_window_size_ioctl(&mut self) -> io::Result<()> {
         let fd = self.stdin.as_raw_fd();
         let mut ws = libc::winsize {
             ws_col: 0,
@@ -118,6 +163,13 @@ impl Terminal {
                 self.wy = ws.ws_row;
                 Ok(())
             }
+        }
+    }
+
+    fn update_window_size(&mut self) -> io::Result<()> {
+        match self.update_window_size_ioctl() {
+            Ok(_) => Ok(()),
+            Err(_) => self.update_window_size_dsr(),
         }
     }
 }
@@ -139,7 +191,7 @@ fn main() {
         e.term.update_window_size().expect("update_window_size");
         let cmd = e.process_input().expect("process_input");
         match cmd {
-            Command::Nothing => (),
+            Command::Nothing => continue,
             Command::Exit => {
                 e.refresh_screen().expect("refresh_screen");
                 break;
@@ -153,5 +205,5 @@ fn main() {
     e.term
         .disable_raw_mode()
         .expect("could not disable raw mode");
-    println!("e: {:?}", e);
+    eprintln!("e: {:?}", e);
 }
