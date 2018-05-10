@@ -3,6 +3,7 @@ extern crate regex;
 extern crate termios;
 
 use std::env;
+use std::fmt;
 use std::io::{self, Read, Write};
 use std::os::unix::io::AsRawFd;
 
@@ -38,11 +39,11 @@ impl Editor {
         self.term.clear_screen()?;
         self.term.move_cursor_topleft()?;
         for _y in 1..self.term.wy {
-            self.term.stdout.write(b"~\r\n")?;
+            self.term.write(b"~\r\n")?;
         }
-        self.term.stdout.write(b"~")?;
+        self.term.write(b"~")?;
         self.term.move_cursor_topleft()?;
-        self.term.stdout.flush()?;
+        self.term.flush()?;
         Ok(())
     }
 }
@@ -62,10 +63,9 @@ enum DeviceStatusResponse {
     WindowSize(libc::winsize),
 }
 
-#[derive(Debug)]
 struct Terminal {
     stdin: Box<io::Stdin>,
-    stdout: Box<io::Stdout>,
+    stdout: Box<io::Write>,
     orig_termios: Option<Termios>,
     wx: u16,
     wy: u16,
@@ -75,7 +75,7 @@ impl Terminal {
     fn new(stdin: io::Stdin, stdout: io::Stdout) -> Terminal {
         Terminal {
             stdin: Box::new(stdin),
-            stdout: Box::new(stdout),
+            stdout: Box::new(io::BufWriter::new(stdout)),
             orig_termios: Option::None,
             wx: 0,
             wy: 0,
@@ -111,25 +111,25 @@ impl Terminal {
     }
 
     fn move_cursor_topleft(&mut self) -> io::Result<()> {
-        self.stdout.write(b"\x1b[H")?;
+        self.write(b"\x1b[H")?;
         Ok(())
     }
 
     fn clear_screen(&mut self) -> io::Result<()> {
-        self.stdout.write(b"\x1b[2J")?;
+        self.write(b"\x1b[2J")?;
         Ok(())
     }
 
     fn move_cursor_offscreen(&mut self) -> io::Result<()> {
-        self.stdout.write(b"\x1b[999C\x1b[999B")?;
+        self.write(b"\x1b[999C\x1b[999B")?;
         Ok(())
     }
 
     fn device_status_report(&mut self, q: DeviceStatusQuery) -> io::Result<DeviceStatusResponse> {
         match q {
             DeviceStatusQuery::WindowSize => {
-                self.stdout.write(b"\x1b[6n")?;
-                self.stdout.flush()?;
+                self.write(b"\x1b[6n")?;
+                self.flush()?;
 
                 let mut out: [u8; 32] = [0; 32];
                 self.stdin.read(&mut out)?;
@@ -195,6 +195,25 @@ impl Terminal {
             Ok(_) => Ok(()),
             Err(_) => self.update_window_size_dsr(),
         }
+    }
+}
+
+impl Write for Terminal {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.stdout.write(buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.stdout.flush()
+    }
+}
+
+impl fmt::Debug for Terminal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Terminal {{ orig_termios: {:?}, wx: {}, wy: {} }}",
+            self.orig_termios, self.wx, self.wy
+        )
     }
 }
 
