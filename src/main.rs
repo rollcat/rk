@@ -10,6 +10,33 @@ use termios::*;
 struct Editor {
     cx: i16,
     cy: i16,
+
+    term: Terminal,
+}
+
+impl Editor {
+    fn new(term: Terminal) -> Editor {
+        Editor {
+            cx: 1,
+            cy: 1,
+            term: term,
+        }
+    }
+
+    fn process_input(&mut self) -> io::Result<Command> {
+        let ch = self.term.get_key()?;
+        Ok(match ch {
+            /* wait  */ 0x00 => Command::Nothing,
+            /* C-q   */ 0x11 => Command::Exit,
+            /* other */ _ => Command::KeyPress { ch: ch },
+        })
+    }
+}
+
+enum Command {
+    Nothing,
+    KeyPress { ch: u8 },
+    Exit,
 }
 
 #[derive(Debug)]
@@ -63,21 +90,24 @@ fn read_char(reader: &mut io::Read) -> io::Result<u8> {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let mut t = Terminal::new(io::stdin());
+    let t = Terminal::new(io::stdin());
+    let mut e = Editor::new(t);
 
     println!("args: {:?}", args);
-    println!("t: {:?}", t);
+    println!("e: {:?}", e);
 
-    t.enable_raw_mode().expect("could not enable raw mode");
+    e.term.enable_raw_mode().expect("could not enable raw mode");
     loop {
-        let ch = t.get_key().expect("get_key");
-        match ch {
-            /* wait */ 0x00 => (),
-            /* C-q  */ 0x11 => break,
-            _ => print!("ch: {:?}\r\n", ch),
+        let cmd = e.process_input().expect("process_input");
+        match cmd {
+            Command::Nothing => (),
+            Command::Exit => break,
+            Command::KeyPress { ch } => print!("ch: {:?}\r\n", ch),
         }
     }
 
-    t.disable_raw_mode().expect("could not disable raw mode");
-    println!("t: {:?}", t);
+    e.term
+        .disable_raw_mode()
+        .expect("could not disable raw mode");
+    println!("e: {:?}", e);
 }
