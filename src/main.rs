@@ -11,16 +11,17 @@ use termios::*;
 struct Editor {
     cx: i16,
     cy: i16,
+}
 
+#[derive(Debug)]
+struct Terminal {
     fd: RawFd,
     orig_termios: Option<Termios>,
 }
 
-impl Editor {
-    fn new(fd: RawFd) -> Editor {
-        Editor {
-            cx: 1,
-            cy: 1,
+impl Terminal {
+    fn new(fd: RawFd) -> Terminal {
+        Terminal {
             fd: fd,
             orig_termios: Option::None,
         }
@@ -58,22 +59,21 @@ fn read_char(fd: &mut io::Read) -> io::Result<u8> {
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut stdin = io::stdin();
-    let mut e = Editor::new(stdin.as_raw_fd());
+    let mut t = Terminal::new(stdin.as_raw_fd());
 
     println!("args: {:?}", args);
-    println!("e: {:?}", e);
+    println!("t: {:?}", t);
 
-    e.enable_raw_mode().expect("could not enable raw mode");
+    t.enable_raw_mode().expect("could not enable raw mode");
     loop {
         let ch = read_char(&mut stdin).expect("could not read char");
-        if ch != 0 {
-            print!("ch: {:?}\r\n", ch);
-        }
-        if ch == 'q' as u8 {
-            break;
+        match ch {
+            0 => (),
+            0x11 => break, // C-q
+            _ => print!("ch: {:?}\r\n", ch),
         }
     }
 
-    e.disable_raw_mode().expect("could not disable raw mode");
-    println!("e: {:?}", e);
+    t.disable_raw_mode().expect("could not disable raw mode");
+    println!("t: {:?}", t);
 }
