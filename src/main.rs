@@ -28,10 +28,15 @@ impl Editor {
 
     fn enable_raw_mode(&mut self) -> io::Result<()> {
         let mut termios = Termios::from_fd(self.fd)?;
-        termios.c_lflag &= !ECHO;
-        tcsetattr(self.fd, TCSAFLUSH, &termios)?;
         tcgetattr(self.fd, &mut termios)?;
         self.orig_termios = Some(termios);
+        termios.c_iflag &= !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+        termios.c_oflag &= !(OPOST);
+        termios.c_cflag |= CS8;
+        termios.c_lflag &= !(ECHO | ICANON | IEXTEN | ISIG);
+        termios.c_cc[VMIN] = 0;
+        termios.c_cc[VTIME] = 1;
+        tcsetattr(self.fd, TCSAFLUSH, &termios)?;
         Ok(())
     }
 
@@ -61,7 +66,9 @@ fn main() {
     e.enable_raw_mode().expect("could not enable raw mode");
     loop {
         let ch = read_char(&mut stdin).expect("could not read char");
-        println!("ch: {:?}", ch);
+        if ch != 0 {
+            print!("ch: {:?}\r\n", ch);
+        }
         if ch == 'q' as u8 {
             break;
         }
