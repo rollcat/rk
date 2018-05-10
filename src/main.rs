@@ -28,23 +28,6 @@ impl Editor {
         }
     }
 
-    fn process_input(&mut self) -> io::Result<Command> {
-        let k = self.term.get_key()?;
-        Ok(match k {
-            Key {
-                ch: '\0',
-                ctrl: false,
-                meta: false,
-            } => Command::Nothing,
-            Key {
-                ch: 'q',
-                ctrl: true,
-                meta: false,
-            } => Command::Exit,
-            _ => Command::KeyPress { key: k },
-        })
-    }
-
     fn refresh_screen(&mut self) -> io::Result<()> {
         let status = format!("? ~~  rk v{}  ~~", VERSION);
         self.term.hide_cursor()?;
@@ -66,7 +49,8 @@ impl Editor {
 #[derive(Debug)]
 enum Command {
     Nothing,
-    KeyPress { key: Key },
+    InsertCharacter(char),
+    Move(Direction),
     Exit,
 }
 
@@ -121,9 +105,69 @@ impl Terminal {
         Ok(())
     }
 
-    fn get_key(&mut self) -> io::Result<Key> {
-        let ch = read_char(&mut self.stdin)?;
-        Ok(Key::new(ch))
+    fn get_key(&mut self) -> io::Result<KeyMod> {
+        let ch0 = read_char(&mut self.stdin)?;
+        Ok(if ch0 == '\x1b' {
+            let ch1 = read_char(&mut self.stdin)?;
+            if ch1 == '[' {
+                let ch2 = read_char(&mut self.stdin)?;
+                eprintln!("ch: {:?} {:?} {:?}", ch0, ch1, ch2);
+                match ch2 {
+                    'A' => KeyMod {
+                        key: Key::Direction(Direction::Up),
+                        ctrl: false,
+                        meta: false,
+                    },
+                    'B' => KeyMod {
+                        key: Key::Direction(Direction::Down),
+                        ctrl: false,
+                        meta: false,
+                    },
+                    'C' => KeyMod {
+                        key: Key::Direction(Direction::Right),
+                        ctrl: false,
+                        meta: false,
+                    },
+                    'D' => KeyMod {
+                        key: Key::Direction(Direction::Left),
+                        ctrl: false,
+                        meta: false,
+                    },
+                    _ => KeyMod {
+                        key: Key::None,
+                        ctrl: false,
+                        meta: false,
+                    },
+                }
+            } else {
+                KeyMod {
+                    key: Key::Char(ch0),
+                    ctrl: false,
+                    meta: false,
+                }
+            }
+        } else {
+            eprintln!("ch: {:?}", ch0);
+            if ch0 == '\0' {
+                KeyMod {
+                    key: Key::None,
+                    ctrl: false,
+                    meta: false,
+                }
+            } else if (ch0 as u8) < 0x20 {
+                KeyMod {
+                    key: Key::Char((ch0 as u8 + 0x60) as char),
+                    ctrl: true,
+                    meta: false,
+                }
+            } else {
+                KeyMod {
+                    key: Key::Char(ch0),
+                    ctrl: false,
+                    meta: false,
+                }
+            }
+        })
     }
 
     fn move_cursor_topleft(&mut self) -> io::Result<()> {
@@ -253,47 +297,44 @@ impl fmt::Debug for Terminal {
     }
 }
 
-struct Key {
-    ch: char,
+#[derive(Debug)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+#[derive(Debug)]
+enum Key {
+    None,
+    Char(char),
+    Direction(Direction),
+}
+
+struct KeyMod {
+    key: Key,
     ctrl: bool,
     meta: bool,
 }
 
-impl Key {
-    fn new(i: u8) -> Key {
-        if i < 0x20 {
-            Key {
-                ch: (i + 0x60) as char,
-                ctrl: true,
-                meta: false,
-            }
-        } else {
-            Key {
-                ch: i as char,
-                ctrl: false,
-                meta: false,
-            }
-        }
-    }
-}
-
-impl fmt::Debug for Key {
+impl fmt::Debug for KeyMod {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Key <")?;
+        write!(f, "KeyMod <")?;
         if self.ctrl {
             write!(f, "C-")?;
         }
         if self.meta {
             write!(f, "M-")?;
         }
-        write!(f, "{}>", self.ch)
+        write!(f, "{:?}>", self.key)
     }
 }
 
-fn read_char(reader: &mut io::Read) -> io::Result<u8> {
+fn read_char(reader: &mut io::Read) -> io::Result<char> {
     let mut buffer = [0; 1];
     reader.read(&mut buffer)?;
-    Ok(buffer[0])
+    Ok(buffer[0] as char)
 }
 
 fn main() {
@@ -306,41 +347,54 @@ fn main() {
     e.term.clear_screen().expect("clear_screen");
     e.refresh_screen().expect("refresh_screen");
     loop {
-        let cmd = e.process_input().expect("process_input");
         e.term.update_window_size().expect("update_window_size");
+
+        let KeyMod { key, ctrl, meta } = e.term.get_key().expect("get_key");
+        let cmd = match key {
+            Key::None => Command::Nothing,
+            Key::Char('q') => Command::Exit,
+            Key::Direction(d) => Command::Move(d),
+            Key::Char(ch) => match ch {
+                'h' => Command::Move(Direction::Left),
+                'l' => Command::Move(Direction::Right),
+                'k' => Command::Move(Direction::Up),
+                'j' => Command::Move(Direction::Down),
+                _ => Command::InsertCharacter(ch),
+            },
+        };
+
         match cmd {
             Command::Nothing => continue,
             Command::Exit => {
                 e.refresh_screen().expect("refresh_screen");
                 break;
             }
-            Command::KeyPress { key } => {
-                match key.ch {
-                    'h' => {
+            Command::InsertCharacter(_) => (),
+            Command::Move(d) => {
+                match d {
+                    Direction::Left => {
                         if e.cx > 0 {
                             e.cx -= 1
                         }
                     }
-                    'l' => {
+                    Direction::Right => {
                         if e.cx < e.term.wx - 1 {
                             e.cx += 1
                         }
                     }
-                    'k' => {
+                    Direction::Up => {
                         if e.cy > 0 {
                             e.cy -= 1
                         }
                     }
-                    'j' => {
+                    Direction::Down => {
                         if e.cy < e.term.wy - 1 {
                             e.cy += 1
                         }
-                    }
-                    ':' => {
-                        e.cy = e.term.wy;
-                        e.cx = 2;
-                    }
-                    _ => (),
+                    } // ':' => {
+                      //     e.cy = e.term.wy;
+                      //     e.cx = 2;
+                      // }
                 }
                 e.refresh_screen().expect("refresh_screen");
             }
