@@ -40,6 +40,7 @@ impl Editor {
         for _y in 1..self.term.wy {
             self.term.stdout.write(b"~\r\n")?;
         }
+        self.term.stdout.write(b"~")?;
         self.term.move_cursor_topleft()?;
         self.term.stdout.flush()?;
         Ok(())
