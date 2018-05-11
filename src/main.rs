@@ -51,6 +51,8 @@ enum Command {
     Nothing,
     InsertCharacter(char),
     Move(Direction),
+    MovePageUp,
+    MovePageDown,
     Exit,
 }
 
@@ -109,22 +111,37 @@ impl Terminal {
         let ch0 = read_char(&mut self.stdin)?;
         Ok(if ch0 == '\x1b' {
             let ch1 = read_char(&mut self.stdin)?;
-            if ch1 == '[' {
-                let ch2 = read_char(&mut self.stdin)?;
-                eprintln!("ch: {:?} {:?} {:?}", ch0, ch1, ch2);
-                match ch2 {
-                    'A' => KeyMod::new(Key::Direction(Direction::Up)),
-                    'B' => KeyMod::new(Key::Direction(Direction::Down)),
-                    'C' => KeyMod::new(Key::Direction(Direction::Right)),
-                    'D' => KeyMod::new(Key::Direction(Direction::Left)),
-                    'a' => KeyMod::new_shift(Key::Direction(Direction::Up)),
-                    'b' => KeyMod::new_shift(Key::Direction(Direction::Down)),
-                    'c' => KeyMod::new_shift(Key::Direction(Direction::Right)),
-                    'd' => KeyMod::new_shift(Key::Direction(Direction::Left)),
-                    _ => KeyMod::new_none(),
+            match ch1 {
+                '[' => {
+                    let ch2 = read_char(&mut self.stdin)?;
+                    match ch2 {
+                        'A' => KeyMod::new(Key::Direction(Up)),
+                        'B' => KeyMod::new(Key::Direction(Down)),
+                        'C' => KeyMod::new(Key::Direction(Right)),
+                        'D' => KeyMod::new(Key::Direction(Left)),
+                        'a' => KeyMod::new_shift(Key::Direction(Up)),
+                        'b' => KeyMod::new_shift(Key::Direction(Down)),
+                        'c' => KeyMod::new_shift(Key::Direction(Right)),
+                        'd' => KeyMod::new_shift(Key::Direction(Left)),
+                        _ => {
+                            let ch3 = read_char(&mut self.stdin)?;
+                            match (ch2, ch3) {
+                                ('5', '~') => KeyMod::new(Key::PageUp),
+                                ('6', '~') => KeyMod::new(Key::PageDown),
+                                ('5', '^') => KeyMod::new_ctrl(Key::PageUp),
+                                ('6', '^') => KeyMod::new_ctrl(Key::PageDown),
+                                _ => {
+                                    eprintln!("ch: {:?} {:?} {:?} {:?}", ch0, ch1, ch2, ch3);
+                                    KeyMod::new_none()
+                                }
+                            }
+                        }
+                    }
                 }
-            } else {
-                KeyMod::new(Key::Char(ch0))
+                _ => {
+                    eprintln!("ch: {:?} {:?}", ch0, ch1);
+                    KeyMod::new_none()
+                }
             }
         } else {
             eprintln!("ch: {:?}", ch0);
@@ -273,11 +290,15 @@ enum Direction {
     Right,
 }
 
+use Direction::*;
+
 #[derive(Debug)]
 enum Key {
     None,
     Char(char),
     Direction(Direction),
+    PageUp,
+    PageDown,
 }
 
 struct KeyMod {
@@ -364,12 +385,14 @@ fn main() {
     loop {
         e.term.update_window_size().expect("update_window_size");
 
+        let km = e.term.get_key().expect("get_key");
+        eprintln!("key: {:?}", km);
         let KeyMod {
             key,
             ctrl,
             meta,
             shift,
-        } = e.term.get_key().expect("get_key");
+        } = km;
         let cmd = match key {
             Key::None => Command::Nothing,
             Key::Char('q') => Command::Exit,
@@ -381,6 +404,8 @@ fn main() {
                 'j' => Command::Move(Direction::Down),
                 _ => Command::InsertCharacter(ch),
             },
+            Key::PageUp => Command::MovePageUp,
+            Key::PageDown => Command::MovePageDown,
         };
 
         match cmd {
@@ -390,35 +415,38 @@ fn main() {
                 break;
             }
             Command::InsertCharacter(_) => (),
-            Command::Move(d) => {
-                match d {
-                    Direction::Left => {
-                        if e.cx > 0 {
-                            e.cx -= 1
-                        }
+            Command::Move(d) => match d {
+                Direction::Left => {
+                    if e.cx > 0 {
+                        e.cx -= 1
                     }
-                    Direction::Right => {
-                        if e.cx < e.term.wx - 1 {
-                            e.cx += 1
-                        }
-                    }
-                    Direction::Up => {
-                        if e.cy > 0 {
-                            e.cy -= 1
-                        }
-                    }
-                    Direction::Down => {
-                        if e.cy < e.term.wy - 1 {
-                            e.cy += 1
-                        }
-                    } // ':' => {
-                      //     e.cy = e.term.wy;
-                      //     e.cx = 2;
-                      // }
                 }
-                e.refresh_screen().expect("refresh_screen");
+                Direction::Right => {
+                    if e.cx < e.term.wx - 1 {
+                        e.cx += 1
+                    }
+                }
+                Direction::Up => {
+                    if e.cy > 0 {
+                        e.cy -= 1
+                    }
+                }
+                Direction::Down => {
+                    if e.cy < e.term.wy - 1 {
+                        e.cy += 1
+                    }
+                }
+            },
+            Command::MovePageUp => {
+                e.cx = 0;
+                e.cy = 0;
+            }
+            Command::MovePageDown => {
+                e.cx = 0;
+                e.cy = e.term.wy - 1;
             }
         }
+        e.refresh_screen().expect("refresh_screen");
     }
 
     e.term
