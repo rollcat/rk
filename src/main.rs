@@ -113,47 +113,19 @@ impl Terminal {
                 let ch2 = read_char(&mut self.stdin)?;
                 eprintln!("ch: {:?} {:?} {:?}", ch0, ch1, ch2);
                 match ch2 {
-                    'A' => KeyMod {
-                        key: Key::Direction(Direction::Up),
-                        ctrl: false,
-                        meta: false,
-                    },
-                    'B' => KeyMod {
-                        key: Key::Direction(Direction::Down),
-                        ctrl: false,
-                        meta: false,
-                    },
-                    'C' => KeyMod {
-                        key: Key::Direction(Direction::Right),
-                        ctrl: false,
-                        meta: false,
-                    },
-                    'D' => KeyMod {
-                        key: Key::Direction(Direction::Left),
-                        ctrl: false,
-                        meta: false,
-                    },
-                    _ => KeyMod {
-                        key: Key::None,
-                        ctrl: false,
-                        meta: false,
-                    },
+                    'A' => KeyMod::new(Key::Direction(Direction::Up)),
+                    'B' => KeyMod::new(Key::Direction(Direction::Down)),
+                    'C' => KeyMod::new(Key::Direction(Direction::Right)),
+                    'D' => KeyMod::new(Key::Direction(Direction::Left)),
+                    _ => KeyMod::new_none(),
                 }
             } else {
-                KeyMod {
-                    key: Key::Char(ch0),
-                    ctrl: false,
-                    meta: false,
-                }
+                KeyMod::new(Key::Char(ch0))
             }
         } else {
             eprintln!("ch: {:?}", ch0);
             if ch0 == '\0' {
-                KeyMod {
-                    key: Key::None,
-                    ctrl: false,
-                    meta: false,
-                }
+                KeyMod::new_none()
             } else if (ch0 as u8) < 0x20 {
                 KeyMod {
                     key: Key::Char((ch0 as u8 + 0x60) as char),
@@ -161,11 +133,7 @@ impl Terminal {
                     meta: false,
                 }
             } else {
-                KeyMod {
-                    key: Key::Char(ch0),
-                    ctrl: false,
-                    meta: false,
-                }
+                KeyMod::new(Key::Char(ch0))
             }
         })
     }
@@ -316,6 +284,23 @@ struct KeyMod {
     key: Key,
     ctrl: bool,
     meta: bool,
+}
+
+impl KeyMod {
+    fn new_none() -> KeyMod {
+        KeyMod {
+            key: Key::None,
+            ctrl: false,
+            meta: false,
+        }
+    }
+    fn new(key: Key) -> KeyMod {
+        KeyMod {
+            key: key,
+            ctrl: false,
+            meta: false,
+        }
+    }
 }
 
 impl fmt::Debug for KeyMod {
