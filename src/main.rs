@@ -117,6 +117,10 @@ impl Terminal {
                     'B' => KeyMod::new(Key::Direction(Direction::Down)),
                     'C' => KeyMod::new(Key::Direction(Direction::Right)),
                     'D' => KeyMod::new(Key::Direction(Direction::Left)),
+                    'a' => KeyMod::new_shift(Key::Direction(Direction::Up)),
+                    'b' => KeyMod::new_shift(Key::Direction(Direction::Down)),
+                    'c' => KeyMod::new_shift(Key::Direction(Direction::Right)),
+                    'd' => KeyMod::new_shift(Key::Direction(Direction::Left)),
                     _ => KeyMod::new_none(),
                 }
             } else {
@@ -127,11 +131,7 @@ impl Terminal {
             if ch0 == '\0' {
                 KeyMod::new_none()
             } else if (ch0 as u8) < 0x20 {
-                KeyMod {
-                    key: Key::Char((ch0 as u8 + 0x60) as char),
-                    ctrl: true,
-                    meta: false,
-                }
+                KeyMod::new_ctrl(Key::Char((ch0 as u8 + 0x60) as char))
             } else {
                 KeyMod::new(Key::Char(ch0))
             }
@@ -284,6 +284,7 @@ struct KeyMod {
     key: Key,
     ctrl: bool,
     meta: bool,
+    shift: bool,
 }
 
 impl KeyMod {
@@ -292,6 +293,7 @@ impl KeyMod {
             key: Key::None,
             ctrl: false,
             meta: false,
+            shift: false,
         }
     }
     fn new(key: Key) -> KeyMod {
@@ -299,6 +301,31 @@ impl KeyMod {
             key: key,
             ctrl: false,
             meta: false,
+            shift: false,
+        }
+    }
+    fn new_ctrl(key: Key) -> KeyMod {
+        KeyMod {
+            key: key,
+            ctrl: true,
+            meta: false,
+            shift: false,
+        }
+    }
+    fn new_meta(key: Key) -> KeyMod {
+        KeyMod {
+            key: key,
+            ctrl: false,
+            meta: true,
+            shift: false,
+        }
+    }
+    fn new_shift(key: Key) -> KeyMod {
+        KeyMod {
+            key: key,
+            ctrl: false,
+            meta: false,
+            shift: true,
         }
     }
 }
@@ -311,6 +338,9 @@ impl fmt::Debug for KeyMod {
         }
         if self.meta {
             write!(f, "M-")?;
+        }
+        if self.shift {
+            write!(f, "S-")?;
         }
         write!(f, "{:?}>", self.key)
     }
@@ -334,7 +364,12 @@ fn main() {
     loop {
         e.term.update_window_size().expect("update_window_size");
 
-        let KeyMod { key, ctrl, meta } = e.term.get_key().expect("get_key");
+        let KeyMod {
+            key,
+            ctrl,
+            meta,
+            shift,
+        } = e.term.get_key().expect("get_key");
         let cmd = match key {
             Key::None => Command::Nothing,
             Key::Char('q') => Command::Exit,
