@@ -55,6 +55,7 @@ enum Command {
     MovePageDown,
     MoveLineHome,
     MoveLineEnd,
+    Erase(Direction),
     Exit,
 }
 
@@ -136,6 +137,7 @@ impl Terminal {
                 buf[3] = read_char(&mut self.stdin)?;
                 match (buf[2], buf[3]) {
                     ('1', '~') => KeyMod::new(Key::Home),
+                    ('3', '~') => KeyMod::new(Key::Delete),
                     ('4', '~') => KeyMod::new(Key::End),
                     ('5', '~') => KeyMod::new(Key::PageUp),
                     ('6', '~') => KeyMod::new(Key::PageDown),
@@ -150,6 +152,7 @@ impl Terminal {
                 }
             }
             ('\0', '\0', '\0') => KeyMod::new_none(),
+            ('\x7f', '\0', '\0') => KeyMod::new(Key::Backspace),
             (ch, '\0', '\0') => if (ch as u8) < 0x20 {
                 KeyMod::new_ctrl(Key::Char((ch as u8 + 0x60) as char))
             } else {
@@ -308,6 +311,8 @@ enum Key {
     PageDown,
     Home,
     End,
+    Backspace,
+    Delete,
 }
 
 struct KeyMod {
@@ -417,6 +422,8 @@ fn main() {
             Key::PageDown => Command::MovePageDown,
             Key::Home => Command::MoveLineHome,
             Key::End => Command::MoveLineEnd,
+            Key::Backspace => Command::Erase(Left),
+            Key::Delete => Command::Erase(Right),
         };
 
         match cmd {
@@ -462,6 +469,17 @@ fn main() {
             Command::MoveLineEnd => {
                 e.cx = e.term.wx - 1;
             }
+            Command::Erase(Left) => {
+                if e.cx > 0 {
+                    e.cx -= 1
+                }
+            }
+            Command::Erase(Right) => {
+                if e.cx < e.term.wx - 1 {
+                    e.cx += 1
+                }
+            }
+            Command::Erase(_) => (),
         }
         e.refresh_screen().expect("refresh_screen");
     }
