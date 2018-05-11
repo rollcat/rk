@@ -4,8 +4,10 @@ extern crate termios;
 
 use std::env;
 use std::fmt;
-use std::io::{self, Read, Write};
+use std::fs::File;
+use std::io::{self, BufRead, Read, Write};
 use std::os::unix::io::AsRawFd;
+use std::path::Path;
 
 use termios::*;
 
@@ -13,10 +15,12 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug)]
 struct Editor {
-    cx: u16,
-    cy: u16,
+    cx: u32,
+    cy: u32,
+    oy: u32,
 
     term: Terminal,
+    lines: Vec<String>,
 }
 
 impl Editor {
@@ -24,22 +28,50 @@ impl Editor {
         Editor {
             cx: 0,
             cy: 0,
+            oy: 0,
             term: term,
+            lines: Vec::new(),
         }
     }
 
+    fn open(&mut self, fname: &Path) -> io::Result<()> {
+        let file = io::BufReader::new(File::open(fname)?);
+        for line in file.lines().map(|l| l.unwrap()) {
+            self.lines.push(line);
+        }
+        Ok(())
+    }
+
     fn refresh_screen(&mut self) -> io::Result<()> {
+        if (self.cy < self.oy) {
+            self.oy = self.cy;
+        }
+        if (self.cy >= self.oy + self.term.wy) {
+            self.oy = self.cy - self.term.wy + 1;
+        }
+
         let status = format!("? ~~  rk v{}  ~~", VERSION);
         self.term.hide_cursor()?;
         self.term.move_cursor_topleft()?;
-        for _y in 1..self.term.wy {
+        for y in 0..(self.term.wy - 1) {
+            let filerow = (y as u32 + self.oy) as usize;
             self.term.clear_line()?;
-            let line = "~";
-            self.term.write(line.as_bytes())?;
+            if filerow < self.lines.len() {
+                let line = &self.lines[filerow];
+                if line.len() > self.term.wx as usize {
+                    let line = &line[..(self.term.wx as usize) - 1];
+                    self.term.write(line.as_bytes())?;
+                    self.term.write(b"\\")?;
+                } else {
+                    self.term.write(line.as_bytes())?;
+                }
+            } else {
+                self.term.write(b"~")?;
+            }
             self.term.write(b"\r\n")?;
         }
-        self.term.write(status.as_bytes())?;
-        self.term.move_cursor(self.cx, self.cy)?;
+        self.term.write("~".as_bytes())?;
+        self.term.move_cursor(self.cx, self.cy - self.oy)?;
         self.term.show_cursor()?;
         self.term.flush()?;
         Ok(())
@@ -71,8 +103,8 @@ struct Terminal {
     stdin: Box<io::Stdin>,
     stdout: Box<io::Write>,
     orig_termios: Option<Termios>,
-    wx: u16,
-    wy: u16,
+    wx: u32,
+    wy: u32,
 }
 
 impl Terminal {
@@ -170,7 +202,7 @@ impl Terminal {
         Ok(())
     }
 
-    fn move_cursor(&mut self, x: u16, y: u16) -> io::Result<()> {
+    fn move_cursor(&mut self, x: u32, y: u32) -> io::Result<()> {
         self.write(format!("\x1b[{};{}H", y + 1, x + 1).as_bytes())?;
         Ok(())
     }
@@ -228,8 +260,8 @@ impl Terminal {
         match self.device_status_report(DeviceStatusQuery::WindowSize) {
             Ok(ds) => match ds {
                 DeviceStatusResponse::WindowSize(ws) => {
-                    self.wx = ws.ws_col;
-                    self.wy = ws.ws_row;
+                    self.wx = ws.ws_col as u32;
+                    self.wy = ws.ws_row as u32;
                     Ok(())
                 }
             },
@@ -248,8 +280,8 @@ impl Terminal {
         match unsafe { libc::ioctl(fd, libc::TIOCGWINSZ, &mut ws) } {
             -1 => Err(io::Error::last_os_error()),
             _ => {
-                self.wx = ws.ws_col;
-                self.wy = ws.ws_row;
+                self.wx = ws.ws_col as u32;
+                self.wy = ws.ws_row as u32;
                 Ok(())
             }
         }
@@ -388,9 +420,14 @@ fn read_char(reader: &mut io::Read) -> io::Result<char> {
 }
 
 fn main() {
-    let _args: Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
     let t = Terminal::new(io::stdin(), io::stdout());
     let mut e = Editor::new(t);
+
+    if args.len() == 2 {
+        let path = Path::new(&args[1]);
+        e.open(path).expect("open");
+    }
 
     e.term.enable_raw_mode().expect("could not enable raw mode");
     e.term.update_window_size().expect("update_window_size");
@@ -450,7 +487,7 @@ fn main() {
                     }
                 }
                 Direction::Down => {
-                    if e.cy < e.term.wy - 1 {
+                    if e.cy < (e.lines.len() - 1) as u32 {
                         e.cy += 1
                     }
                 }
