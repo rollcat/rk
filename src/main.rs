@@ -53,6 +53,8 @@ enum Command {
     Move(Direction),
     MovePageUp,
     MovePageDown,
+    MoveLineHome,
+    MoveLineEnd,
     Exit,
 }
 
@@ -108,49 +110,54 @@ impl Terminal {
     }
 
     fn get_key(&mut self) -> io::Result<KeyMod> {
-        let ch0 = read_char(&mut self.stdin)?;
-        Ok(if ch0 == '\x1b' {
-            let ch1 = read_char(&mut self.stdin)?;
-            match ch1 {
-                '[' => {
-                    let ch2 = read_char(&mut self.stdin)?;
-                    match ch2 {
-                        'A' => KeyMod::new(Key::Direction(Up)),
-                        'B' => KeyMod::new(Key::Direction(Down)),
-                        'C' => KeyMod::new(Key::Direction(Right)),
-                        'D' => KeyMod::new(Key::Direction(Left)),
-                        'a' => KeyMod::new_shift(Key::Direction(Up)),
-                        'b' => KeyMod::new_shift(Key::Direction(Down)),
-                        'c' => KeyMod::new_shift(Key::Direction(Right)),
-                        'd' => KeyMod::new_shift(Key::Direction(Left)),
-                        _ => {
-                            let ch3 = read_char(&mut self.stdin)?;
-                            match (ch2, ch3) {
-                                ('5', '~') => KeyMod::new(Key::PageUp),
-                                ('6', '~') => KeyMod::new(Key::PageDown),
-                                ('5', '^') => KeyMod::new_ctrl(Key::PageUp),
-                                ('6', '^') => KeyMod::new_ctrl(Key::PageDown),
-                                _ => {
-                                    eprintln!("ch: {:?} {:?} {:?} {:?}", ch0, ch1, ch2, ch3);
-                                    KeyMod::new_none()
-                                }
-                            }
-                        }
+        let mut buf = ['\0'; 4];
+        buf[0] = read_char(&mut self.stdin)?;
+        if buf[0] == '\x1b' {
+            buf[1] = read_char(&mut self.stdin)?;
+        }
+        if (buf[0], buf[1]) == ('\x1b', '[') {
+            buf[2] = read_char(&mut self.stdin)?;
+        }
+
+        Ok(match (buf[0], buf[1], buf[2]) {
+            ('\x1b', '[', 'A') => KeyMod::new(Key::Direction(Up)),
+            ('\x1b', '[', 'B') => KeyMod::new(Key::Direction(Down)),
+            ('\x1b', '[', 'C') => KeyMod::new(Key::Direction(Right)),
+            ('\x1b', '[', 'D') => KeyMod::new(Key::Direction(Left)),
+            ('\x1b', '[', 'H') => KeyMod::new(Key::Home),
+            ('\x1b', '[', 'F') => KeyMod::new(Key::End),
+            ('\x1b', 'O', 'H') => KeyMod::new(Key::Home),
+            ('\x1b', 'O', 'F') => KeyMod::new(Key::End),
+            ('\x1b', '[', 'a') => KeyMod::new_shift(Key::Direction(Up)),
+            ('\x1b', '[', 'b') => KeyMod::new_shift(Key::Direction(Down)),
+            ('\x1b', '[', 'c') => KeyMod::new_shift(Key::Direction(Right)),
+            ('\x1b', '[', 'd') => KeyMod::new_shift(Key::Direction(Left)),
+            ('\x1b', '[', _) => {
+                buf[3] = read_char(&mut self.stdin)?;
+                match (buf[2], buf[3]) {
+                    ('1', '~') => KeyMod::new(Key::Home),
+                    ('4', '~') => KeyMod::new(Key::End),
+                    ('5', '~') => KeyMod::new(Key::PageUp),
+                    ('6', '~') => KeyMod::new(Key::PageDown),
+                    ('7', '~') => KeyMod::new(Key::Home),
+                    ('8', '~') => KeyMod::new(Key::End),
+                    ('5', '^') => KeyMod::new_ctrl(Key::PageUp),
+                    ('6', '^') => KeyMod::new_ctrl(Key::PageDown),
+                    _ => {
+                        eprintln!("buf: {:?}", buf);
+                        KeyMod::new_none()
                     }
                 }
-                _ => {
-                    eprintln!("ch: {:?} {:?}", ch0, ch1);
-                    KeyMod::new_none()
-                }
             }
-        } else {
-            eprintln!("ch: {:?}", ch0);
-            if ch0 == '\0' {
-                KeyMod::new_none()
-            } else if (ch0 as u8) < 0x20 {
-                KeyMod::new_ctrl(Key::Char((ch0 as u8 + 0x60) as char))
+            ('\0', '\0', '\0') => KeyMod::new_none(),
+            (ch, '\0', '\0') => if (ch as u8) < 0x20 {
+                KeyMod::new_ctrl(Key::Char((ch as u8 + 0x60) as char))
             } else {
-                KeyMod::new(Key::Char(ch0))
+                KeyMod::new(Key::Char(ch))
+            },
+            _ => {
+                eprintln!("buf: {:?}", buf);
+                KeyMod::new_none()
             }
         })
     }
@@ -299,6 +306,8 @@ enum Key {
     Direction(Direction),
     PageUp,
     PageDown,
+    Home,
+    End,
 }
 
 struct KeyMod {
@@ -406,6 +415,8 @@ fn main() {
             },
             Key::PageUp => Command::MovePageUp,
             Key::PageDown => Command::MovePageDown,
+            Key::Home => Command::MoveLineHome,
+            Key::End => Command::MoveLineEnd,
         };
 
         match cmd {
@@ -444,6 +455,12 @@ fn main() {
             Command::MovePageDown => {
                 e.cx = 0;
                 e.cy = e.term.wy - 1;
+            }
+            Command::MoveLineHome => {
+                e.cx = 0;
+            }
+            Command::MoveLineEnd => {
+                e.cx = e.term.wx - 1;
             }
         }
         e.refresh_screen().expect("refresh_screen");
