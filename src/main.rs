@@ -177,6 +177,8 @@ impl Terminal {
                     ('8', '~') => KeyMod::new(Key::End),
                     ('5', '^') => KeyMod::new_ctrl(Key::PageUp),
                     ('6', '^') => KeyMod::new_ctrl(Key::PageDown),
+                    ('7', '^') => KeyMod::new_ctrl(Key::Home),
+                    ('8', '^') => KeyMod::new_ctrl(Key::End),
                     _ => {
                         eprintln!("buf: {:?}", buf);
                         KeyMod::new_none()
