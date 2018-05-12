@@ -185,6 +185,7 @@ impl Terminal {
                     }
                 }
             }
+            ('\x1b', ch, '\0') => KeyMod::new_meta(Key::Char(ch)),
             ('\0', '\0', '\0') => KeyMod::new_none(),
             ('\x7f', '\0', '\0') => KeyMod::new(Key::Backspace),
             (ch, '\0', '\0') => if (ch as u8) < 0x20 {
