@@ -443,27 +443,21 @@ fn main() {
         eprintln!("key: {:?}", km);
         let KeyMod {
             key,
-            ctrl: _,
-            meta: _,
-            shift: _,
+            ctrl,
+            meta,
+            shift,
         } = km;
-        let cmd = match key {
-            Key::None => Command::Nothing,
-            Key::Char('q') => Command::Exit,
-            Key::Direction(d) => Command::Move(d),
-            Key::Char(ch) => match ch {
-                'h' => Command::Move(Left),
-                'l' => Command::Move(Right),
-                'k' => Command::Move(Up),
-                'j' => Command::Move(Down),
-                _ => Command::InsertCharacter(ch),
-            },
-            Key::PageUp => Command::MovePageUp,
-            Key::PageDown => Command::MovePageDown,
-            Key::Home => Command::MoveLineHome,
-            Key::End => Command::MoveLineEnd,
-            Key::Backspace => Command::Erase(Left),
-            Key::Delete => Command::Erase(Right),
+        let cmd = match (ctrl, meta, shift, key) {
+            (true, false, false, Key::Char('q')) => Command::Exit,
+            (false, false, _, Key::Direction(d)) => Command::Move(d),
+            (false, false, _, Key::Char(ch)) => Command::InsertCharacter(ch),
+            (false, false, _, Key::PageUp) => Command::MovePageUp,
+            (false, false, _, Key::PageDown) => Command::MovePageDown,
+            (false, false, _, Key::Home) => Command::MoveLineHome,
+            (false, false, _, Key::End) => Command::MoveLineEnd,
+            (false, false, _, Key::Backspace) => Command::Erase(Left),
+            (false, false, _, Key::Delete) => Command::Erase(Right),
+            (_, _, _, _) => Command::Nothing,
         };
 
         match cmd {
