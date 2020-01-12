@@ -43,14 +43,14 @@ impl Editor {
     }
 
     fn refresh_screen(&mut self) -> io::Result<()> {
-        if (self.cy < self.oy) {
+        if self.cy < self.oy {
             self.oy = self.cy;
         }
-        if (self.cy >= self.oy + self.term.wy) {
+        if self.cy >= self.oy + self.term.wy {
             self.oy = self.cy - self.term.wy + 1;
         }
 
-        let status = format!("? ~~  rk v{}  ~~", VERSION);
+        let _status = format!("? ~~  rk v{}  ~~", VERSION);
         self.term.hide_cursor()?;
         self.term.move_cursor_topleft()?;
         for y in 0..(self.term.wy - 1) {
@@ -101,7 +101,7 @@ enum DeviceStatusResponse {
 
 struct Terminal {
     stdin: Box<io::Stdin>,
-    stdout: Box<io::Write>,
+    stdout: Box<dyn io::Write>,
     orig_termios: Option<Termios>,
     wx: u32,
     wy: u32,
@@ -416,7 +416,7 @@ impl fmt::Debug for KeyMod {
     }
 }
 
-fn read_char(reader: &mut io::Read) -> io::Result<char> {
+fn read_char(reader: &mut dyn io::Read) -> io::Result<char> {
     let mut buffer = [0; 1];
     reader.read(&mut buffer)?;
     Ok(buffer[0] as char)
@@ -443,9 +443,9 @@ fn main() {
         eprintln!("key: {:?}", km);
         let KeyMod {
             key,
-            ctrl,
-            meta,
-            shift,
+            ctrl: _,
+            meta: _,
+            shift: _,
         } = km;
         let cmd = match key {
             Key::None => Command::Nothing,
