@@ -188,11 +188,13 @@ impl Terminal {
             ('\x1b', ch, '\0') => KeyMod::new_meta(Key::Char(ch)),
             ('\0', '\0', '\0') => KeyMod::new_none(),
             ('\x7f', '\0', '\0') => KeyMod::new(Key::Backspace),
-            (ch, '\0', '\0') => if (ch as u8) < 0x20 {
-                KeyMod::new_ctrl(Key::Char((ch as u8 + 0x60) as char))
-            } else {
-                KeyMod::new(Key::Char(ch))
-            },
+            (ch, '\0', '\0') => {
+                if (ch as u8) < 0x20 {
+                    KeyMod::new_ctrl(Key::Char((ch as u8 + 0x60) as char))
+                } else {
+                    KeyMod::new(Key::Char(ch))
+                }
+            }
             _ => {
                 eprintln!("buf: {:?}", buf);
                 KeyMod::new_none()
@@ -225,7 +227,10 @@ impl Terminal {
         Ok(())
     }
 
-    fn device_status_report(&mut self, q: DeviceStatusQuery) -> io::Result<DeviceStatusResponse> {
+    fn device_status_report(
+        &mut self,
+        q: DeviceStatusQuery,
+    ) -> io::Result<DeviceStatusResponse> {
         match q {
             DeviceStatusQuery::WindowSize => {
                 self.write(b"\x1b[6n")?;
@@ -239,16 +244,22 @@ impl Terminal {
                     \x1b\[
                     (?P<r>\d{1,4});
                     (?P<c>\d+)R",
-                ).unwrap();
-                let e = io::Error::new(io::ErrorKind::Other, "can't parse response");
+                )
+                .unwrap();
+                let e = io::Error::new(
+                    io::ErrorKind::Other,
+                    "can't parse response",
+                );
                 match std::str::from_utf8(&out) {
                     Ok(s) => match re.captures(s) {
-                        Some(m) => Ok(DeviceStatusResponse::WindowSize(libc::winsize {
-                            ws_col: m["c"].parse::<u16>().unwrap(),
-                            ws_row: m["r"].parse::<u16>().unwrap(),
-                            ws_xpixel: 0,
-                            ws_ypixel: 0,
-                        })),
+                        Some(m) => Ok(DeviceStatusResponse::WindowSize(
+                            libc::winsize {
+                                ws_col: m["c"].parse::<u16>().unwrap(),
+                                ws_row: m["r"].parse::<u16>().unwrap(),
+                                ws_xpixel: 0,
+                                ws_ypixel: 0,
+                            },
+                        )),
                         None => Err(e),
                     },
                     Err(_) => Err(e),
