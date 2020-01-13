@@ -63,7 +63,7 @@ impl Editor {
             self.ox = self.cx - self.term.wx + 1;
         }
 
-        let _status = format!("? ~~  rk v{}  ~~", VERSION);
+        let status = format!("? ~~  rk v{}  ~~", VERSION);
         self.term.hide_cursor()?;
         self.term.move_cursor_topleft()?;
         for y in 0..(self.term.wy - 1) {
@@ -81,7 +81,7 @@ impl Editor {
             }
             self.term.write(b"\r\n")?;
         }
-        self.term.write(b"~")?;
+        self.term.write(status.as_bytes())?;
         self.term
             .move_cursor(self.cx - self.ox, self.cy - self.oy)?;
         self.term.show_cursor()?;
