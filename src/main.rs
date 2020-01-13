@@ -11,12 +11,18 @@ use std::path::Path;
 
 use termios::*;
 
+mod utils;
+use utils::*;
+
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug)]
 struct Editor {
+    // Cursor position (in file)
     cx: u32,
     cy: u32,
+    // Offset (window scrolling)
+    ox: u32,
     oy: u32,
 
     term: Terminal,
@@ -28,6 +34,7 @@ impl Editor {
         Editor {
             cx: 0,
             cy: 0,
+            ox: 0,
             oy: 0,
             term: term,
             lines: Vec::new(),
@@ -46,8 +53,14 @@ impl Editor {
         if self.cy < self.oy {
             self.oy = self.cy;
         }
+        if self.cx < self.ox {
+            self.ox = self.cx;
+        }
         if self.cy >= self.oy + self.term.wy {
             self.oy = self.cy - self.term.wy + 1;
+        }
+        if self.cx >= self.ox + self.term.wx {
+            self.ox = self.cx - self.term.wx + 1;
         }
 
         let _status = format!("? ~~  rk v{}  ~~", VERSION);
@@ -58,20 +71,19 @@ impl Editor {
             self.term.clear_line()?;
             if filerow < self.lines.len() {
                 let line = &self.lines[filerow];
-                if line.len() > self.term.wx as usize {
-                    let line = &line[..(self.term.wx as usize) - 1];
-                    self.term.write(line.as_bytes())?;
-                    self.term.write(b"\\")?;
-                } else {
-                    self.term.write(line.as_bytes())?;
-                }
+                let line = line.uslice(
+                    self.ox as usize,
+                    (self.ox + self.term.wx) as usize,
+                );
+                self.term.write(line.as_bytes())?;
             } else {
                 self.term.write(b"~")?;
             }
             self.term.write(b"\r\n")?;
         }
-        self.term.write("~".as_bytes())?;
-        self.term.move_cursor(self.cx, self.cy - self.oy)?;
+        self.term.write(b"~")?;
+        self.term
+            .move_cursor(self.cx - self.ox, self.cy - self.oy)?;
         self.term.show_cursor()?;
         self.term.flush()?;
         Ok(())
@@ -477,28 +489,22 @@ fn main() {
                 e.refresh_screen().expect("refresh_screen");
                 break;
             }
-            Command::InsertCharacter(_) => (),
+            Command::InsertCharacter(ch) => {
+                eprintln!("typing: {}", ch);
+            }
             Command::Move(d) => match d {
                 Direction::Left => {
                     if e.cx > 0 {
                         e.cx -= 1
                     }
                 }
-                Direction::Right => {
-                    if e.cx < e.term.wx - 1 {
-                        e.cx += 1
-                    }
-                }
+                Direction::Right => e.cx += 1,
                 Direction::Up => {
                     if e.cy > 0 {
                         e.cy -= 1
                     }
                 }
-                Direction::Down => {
-                    if e.cy < (e.lines.len() - 1) as u32 {
-                        e.cy += 1
-                    }
-                }
+                Direction::Down => e.cy += 1,
             },
             Command::MovePageUp => {
                 e.cx = 0;
@@ -519,14 +525,19 @@ fn main() {
                     e.cx -= 1
                 }
             }
-            Command::Erase(Right) => {
-                if e.cx < e.term.wx - 1 {
-                    e.cx += 1
-                }
-            }
+            Command::Erase(Right) => e.cx += 1,
             Command::Erase(_) => (),
         }
+        // Scroll to show cursor
+        e.ox = 0;
+        while (e.cx - e.ox) >= (e.term.wx as f32 * 0.90) as u32 {
+            e.ox += (e.term.wx as f32 * 0.85) as u32;
+        }
         e.refresh_screen().expect("refresh_screen");
+        eprintln!(
+            "editor: [ cx: {}, cy: {}, ox: {}, oy: {} ]",
+            e.cx, e.cy, e.ox, e.oy
+        );
     }
 
     e.term
