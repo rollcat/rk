@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+for hook in ./hooks/*
+do
+    ln -sf "$hook" "./.git/${hook}"
+done
