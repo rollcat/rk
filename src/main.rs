@@ -473,6 +473,12 @@ fn main() {
         let cmd = match (ctrl, meta, shift, key) {
             (true, false, false, Key::Char('q')) => Command::Exit,
             (false, false, _, Key::Direction(d)) => Command::Move(d),
+            (true, false, _, Key::Direction(d)) => match d {
+                Direction::Up => Command::MovePageUp,
+                Direction::Down => Command::MovePageDown,
+                Direction::Left => Command::MoveLineHome,
+                Direction::Right => Command::MoveLineEnd,
+            },
             (false, false, _, Key::Char(ch)) => Command::InsertCharacter(ch),
             (false, false, _, Key::PageUp) => Command::MovePageUp,
             (false, false, _, Key::PageDown) => Command::MovePageDown,
