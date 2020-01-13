@@ -480,7 +480,18 @@ fn main() {
             (false, false, _, Key::End) => Command::MoveLineEnd,
             (false, false, _, Key::Backspace) => Command::Erase(Left),
             (false, false, _, Key::Delete) => Command::Erase(Right),
-            (_, _, _, _) => Command::Nothing,
+            (_, _, _, key) => {
+                eprintln!(
+                    "unhandled: {:?}",
+                    KeyMod {
+                        key,
+                        ctrl,
+                        meta,
+                        shift,
+                    }
+                );
+                Command::Nothing
+            }
         };
 
         match cmd {
