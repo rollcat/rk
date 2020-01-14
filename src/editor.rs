@@ -170,6 +170,7 @@ impl Editor {
             }
             Direction::Down => self.cy += 1,
         }
+        self.cy = min(self.cy, self.lines.len() - 1);
         self.cx = min(self.cx, self.lines[self.cy].ulen());
     }
 
