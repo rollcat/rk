@@ -40,13 +40,37 @@ impl Editor {
         self.term.enable_raw_mode()?;
         self.term.update_window_size()?;
         self.term.clear_screen()?;
-        self.refresh_screen()?;
+        self.update_screen()?;
         Ok(())
     }
 
     pub fn update(&mut self) -> io::Result<Option<Exit>> {
         self.term.update_window_size()?;
 
+        let cmd = self.update_input()?;
+        let status = self.exec_cmd(cmd)?;
+        self.scroll_to_cursor();
+        self.update_screen()?;
+        eprintln!(
+            "editor: {{ cx: {}, cy: {}, ox: {}, oy: {} }}",
+            self.cx, self.cy, self.ox, self.oy
+        );
+        Ok(status)
+    }
+
+    pub fn deinit(&mut self) -> io::Result<()> {
+        self.term.disable_raw_mode()
+    }
+
+    pub fn open(&mut self, fname: &Path) -> io::Result<()> {
+        let file = io::BufReader::new(File::open(fname)?);
+        for line in file.lines().map(|l| l.unwrap()) {
+            self.lines.push(line);
+        }
+        Ok(())
+    }
+
+    fn update_input(&mut self) -> io::Result<Command> {
         let km = self.term.get_key()?;
         eprintln!("key: {:?}", km);
         let KeyMod {
@@ -85,11 +109,14 @@ impl Editor {
                 Command::Nothing
             }
         };
+        Ok(cmd)
+    }
 
+    fn exec_cmd(&mut self, cmd: Command) -> io::Result<Option<Exit>> {
         match cmd {
             Command::Nothing => (),
             Command::Exit => {
-                self.refresh_screen()?;
+                self.update_screen()?;
                 return Ok(Some(Exit));
             }
             Command::InsertCharacter(ch) => {
@@ -131,32 +158,17 @@ impl Editor {
             Command::Erase(Right) => self.cx += 1,
             Command::Erase(_) => (),
         }
-        // Scroll to show cursor
+        return Ok(None);
+    }
+
+    fn scroll_to_cursor(&mut self) {
         self.ox = 0;
         while (self.cx - self.ox) >= (self.term.wx as f32 * 0.90) as u32 {
             self.ox += (self.term.wx as f32 * 0.85) as u32;
         }
-        self.refresh_screen().expect("refresh_screen");
-        eprintln!(
-            "editor: {{ cx: {}, cy: {}, ox: {}, oy: {} }}",
-            self.cx, self.cy, self.ox, self.oy
-        );
-        Ok(None)
     }
 
-    pub fn deinit(&mut self) -> io::Result<()> {
-        self.term.disable_raw_mode()
-    }
-
-    pub fn open(&mut self, fname: &Path) -> io::Result<()> {
-        let file = io::BufReader::new(File::open(fname)?);
-        for line in file.lines().map(|l| l.unwrap()) {
-            self.lines.push(line);
-        }
-        Ok(())
-    }
-
-    pub fn refresh_screen(&mut self) -> io::Result<()> {
+    fn update_screen(&mut self) -> io::Result<()> {
         if self.cy < self.oy {
             self.oy = self.cy;
         }
