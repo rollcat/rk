@@ -104,6 +104,8 @@ impl Editor {
                 Key::Down => Command::Move(Direction::Down),
                 Key::Left => Command::Move(Direction::Left),
                 Key::Right => Command::Move(Direction::Right),
+                Key::Alt('b') => Command::Move(Direction::Left),
+                Key::Alt('f') => Command::Move(Direction::Right),
                 Key::Char(ch) => Command::InsertCharacter(ch),
                 Key::Ctrl('m') => Command::InsertCharacter('\n'),
                 Key::PageUp => Command::MovePageUp,
