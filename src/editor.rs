@@ -151,13 +151,9 @@ impl Editor {
             Command::MoveLineEnd => {
                 self.cx = self.term.wx - 1;
             }
-            Command::Erase(Left) => {
-                if self.cx > 0 {
-                    self.cx -= 1
-                }
+            Command::Erase(d) => {
+                self.exec_cmd_erase(d);
             }
-            Command::Erase(Right) => self.cx += 1,
-            Command::Erase(_) => (),
         }
         return Ok(None);
     }
@@ -201,6 +197,41 @@ impl Editor {
                 self.lines[self.cy] = newline;
                 self.exec_cmd_move(Right);
             }
+        }
+    }
+
+    fn exec_cmd_erase(&mut self, d: Direction) {
+        match d {
+            Left => {
+                if self.cx == 0 {
+                    if self.cy == 0 {
+                        // top left, do nothing
+                        return;
+                    }
+                    // join this line with previous
+                    let line = self.lines.remove(self.cy);
+                    self.cy -= 1;
+                    self.cx = self.lines[self.cy].len();
+                    let mut newline =
+                        String::with_capacity(self.cx + line.len());
+                    newline.push_str(&self.lines[self.cy]);
+                    newline.push_str(&line);
+                    self.lines[self.cy] = newline;
+                } else {
+                    // remove from the middle
+                    let line = &self.lines[self.cy];
+                    let len = line.len();
+                    let mut newline = String::with_capacity(len - 1);
+                    newline.push_str(&line.uslice(0, self.cx - 1));
+                    newline.push_str(&line.uslice(self.cx, len));
+                    self.lines[self.cy] = newline;
+                    self.exec_cmd_move(Left);
+                }
+            }
+            Right => {
+                // todo
+            }
+            _ => {} // noop
         }
     }
 
