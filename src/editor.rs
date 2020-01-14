@@ -5,7 +5,6 @@ use std::path::Path;
 
 use termion::event::{Event, Key};
 
-
 use tty;
 use utils::*;
 
@@ -171,7 +170,7 @@ impl Editor {
             }
             Direction::Down => self.cy += 1,
         }
-        self.cx = min(self.cx, self.lines[self.cy].len());
+        self.cx = min(self.cx, self.lines[self.cy].ulen());
     }
 
     fn exec_cmd_insert(&mut self, ch: char) {
@@ -181,13 +180,14 @@ impl Editor {
                 let line = self.lines[self.cy].clone();
                 self.lines[self.cy] = line.uslice(0, self.cx);
                 self.cy += 1;
-                self.lines.insert(self.cy, line.uslice(self.cx, line.len()));
+                self.lines
+                    .insert(self.cy, line.uslice(self.cx, line.ulen()));
                 self.cx = 0;
             }
             _ => {
                 // Insert in the middle of the current line
                 let line = &self.lines[self.cy];
-                let len = line.len();
+                let len = line.ulen();
                 let mut newline = String::with_capacity(len + 1);
                 newline.push_str(&line.uslice(0, self.cx));
                 newline.push(ch);
@@ -209,16 +209,16 @@ impl Editor {
                     // join this line with previous
                     let line = self.lines.remove(self.cy);
                     self.cy -= 1;
-                    self.cx = self.lines[self.cy].len();
+                    self.cx = self.lines[self.cy].ulen();
                     let mut newline =
-                        String::with_capacity(self.cx + line.len());
+                        String::with_capacity(self.cx + line.ulen());
                     newline.push_str(&self.lines[self.cy]);
                     newline.push_str(&line);
                     self.lines[self.cy] = newline;
                 } else {
                     // remove from the middle
                     let line = &self.lines[self.cy];
-                    let len = line.len();
+                    let len = line.ulen();
                     let mut newline = String::with_capacity(len - 1);
                     newline.push_str(&line.uslice(0, self.cx - 1));
                     newline.push_str(&line.uslice(self.cx, len));
@@ -276,7 +276,7 @@ impl Editor {
             self.term.write(b"\r\n")?;
         }
         self.term.write(status.uslice(0, self.term.wx).as_bytes())?;
-        for _i in status.len()..self.term.wx {
+        for _i in status.ulen()..self.term.wx {
             self.term.write(b" ")?;
         }
         self.term
