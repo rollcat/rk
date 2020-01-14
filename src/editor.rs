@@ -67,7 +67,9 @@ impl Editor {
     }
 
     pub fn deinit(&mut self) -> io::Result<()> {
-        self.term.disable_raw_mode()
+        self.term.move_cursor_topleft()?;
+        self.term.disable_raw_mode()?;
+        Ok(())
     }
 
     pub fn open(&mut self, fname: &Path) -> io::Result<()> {
