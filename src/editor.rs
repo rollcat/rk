@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
@@ -129,23 +130,12 @@ impl Editor {
                 self.update_screen()?;
                 return Ok(Some(Exit));
             }
-            Command::InsertCharacter(_ch) => {
-                // eprintln!("typing: {}", ch);
+            Command::InsertCharacter(ch) => {
+                self.exec_cmd_insert(ch);
             }
-            Command::Move(d) => match d {
-                Direction::Left => {
-                    if self.cx > 0 {
-                        self.cx -= 1
-                    }
-                }
-                Direction::Right => self.cx += 1,
-                Direction::Up => {
-                    if self.cy > 0 {
-                        self.cy -= 1
-                    }
-                }
-                Direction::Down => self.cy += 1,
-            },
+            Command::Move(d) => {
+                self.exec_cmd_move(d);
+            }
             Command::MovePageUp => {
                 self.cx = 0;
                 self.cy = 0;
@@ -169,6 +159,42 @@ impl Editor {
             Command::Erase(_) => (),
         }
         return Ok(None);
+    }
+
+    fn exec_cmd_move(&mut self, d: Direction) {
+        match d {
+            Direction::Left => {
+                if self.cx > 0 {
+                    self.cx -= 1
+                }
+            }
+            Direction::Right => self.cx += 1,
+            Direction::Up => {
+                if self.cy > 0 {
+                    self.cy -= 1
+                }
+            }
+            Direction::Down => self.cy += 1,
+        }
+        self.cx = min(self.cx, self.lines[self.cy].len());
+    }
+
+    fn exec_cmd_insert(&mut self, ch: char) {
+        match ch {
+            '\n' => {
+                // todo
+            }
+            _ => {
+                let line = &self.lines[self.cy];
+                let len = line.len();
+                let mut newline = String::with_capacity(len + 1);
+                newline.push_str(&line.uslice(0, self.cx));
+                newline.push(ch);
+                newline.push_str(&line.uslice(self.cx, len));
+                self.lines[self.cy] = newline;
+                self.exec_cmd_move(Right);
+            }
+        }
     }
 
     fn scroll_to_cursor(&mut self) {
