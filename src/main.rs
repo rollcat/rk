@@ -4,6 +4,7 @@ extern crate termios;
 
 use std::env;
 use std::io;
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::Path;
 
 mod editor;
@@ -16,18 +17,22 @@ fn main() {
     let t = tty::Terminal::new(io::stdin(), io::stdout());
     let mut e = editor::Editor::new(t);
 
-    if args.len() == 2 {
-        let path = Path::new(&args[1]);
-        e.open(path).expect("open");
-    }
-
-    e.init().unwrap();
-    loop {
-        match e.update().unwrap() {
-            Some(editor::Exit) => break,
-            None => continue,
+    let r = catch_unwind(AssertUnwindSafe(|| {
+        if args.len() == 2 {
+            let path = Path::new(&args[1]);
+            e.open(path).expect("open");
         }
-    }
+        e.init().unwrap();
+        loop {
+            match e.update().unwrap() {
+                Some(editor::Exit) => break,
+                None => continue,
+            }
+        }
+    }));
     e.deinit().unwrap();
     eprintln!("e: {:?}", e);
+    if let Err(err) = r {
+        resume_unwind(err);
+    };
 }

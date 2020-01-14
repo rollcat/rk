@@ -57,6 +57,7 @@ impl Editor {
         } = km;
         let cmd = match (ctrl, meta, shift, key) {
             (true, false, false, Key::Char('q')) => Command::Exit,
+            (false, true, _, Key::Char('Q')) => panic!("forced a panic"),
             (false, false, _, Key::Direction(d)) => Command::Move(d),
             (true, false, _, Key::Direction(d)) => match d {
                 Direction::Up => Command::MovePageUp,
