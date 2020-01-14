@@ -23,8 +23,8 @@ pub struct Terminal {
     stdin: Box<io::Stdin>,
     stdout: Box<dyn io::Write>,
     orig_termios: Option<Termios>,
-    pub wx: u32,
-    pub wy: u32,
+    pub wx: usize,
+    pub wy: usize,
 }
 
 fn read_char(reader: &mut dyn io::Read) -> io::Result<char> {
@@ -133,7 +133,7 @@ impl Terminal {
         Ok(())
     }
 
-    pub fn move_cursor(&mut self, x: u32, y: u32) -> io::Result<()> {
+    pub fn move_cursor(&mut self, x: usize, y: usize) -> io::Result<()> {
         self.write(format!("\x1b[{};{}H", y + 1, x + 1).as_bytes())?;
         Ok(())
     }
@@ -200,8 +200,8 @@ impl Terminal {
         match self.device_status_report(DeviceStatusQuery::WindowSize) {
             Ok(ds) => match ds {
                 DeviceStatusResponse::WindowSize(ws) => {
-                    self.wx = ws.ws_col as u32;
-                    self.wy = ws.ws_row as u32;
+                    self.wx = ws.ws_col as usize;
+                    self.wy = ws.ws_row as usize;
                     Ok(())
                 }
             },
@@ -220,8 +220,8 @@ impl Terminal {
         match unsafe { libc::ioctl(fd, libc::TIOCGWINSZ, &mut ws) } {
             -1 => Err(io::Error::last_os_error()),
             _ => {
-                self.wx = ws.ws_col as u32;
-                self.wy = ws.ws_row as u32;
+                self.wx = ws.ws_col as usize;
+                self.wy = ws.ws_row as usize;
                 Ok(())
             }
         }

@@ -20,11 +20,11 @@ pub struct Editor {
     fname: String,
     lines: Vec<String>,
     // Cursor position (in file)
-    cx: u32,
-    cy: u32,
+    cx: usize,
+    cy: usize,
     // Offset (window scrolling)
-    ox: u32,
-    oy: u32,
+    ox: usize,
+    oy: usize,
 
     // Status line
     message: String,
@@ -173,8 +173,8 @@ impl Editor {
 
     fn scroll_to_cursor(&mut self) {
         self.ox = 0;
-        while (self.cx - self.ox) >= (self.term.wx as f32 * 0.90) as u32 {
-            self.ox += (self.term.wx as f32 * 0.85) as u32;
+        while (self.cx - self.ox) >= (self.term.wx as f32 * 0.90) as usize {
+            self.ox += (self.term.wx as f32 * 0.85) as usize;
         }
     }
 
@@ -202,23 +202,19 @@ impl Editor {
         self.term.hide_cursor()?;
         self.term.move_cursor_topleft()?;
         for y in 0..(self.term.wy - 1) {
-            let filerow = (y as u32 + self.oy) as usize;
+            let filerow = y + self.oy;
             self.term.clear_line()?;
             if filerow < self.lines.len() {
                 let line = &self.lines[filerow];
-                let line = line.uslice(
-                    self.ox as usize,
-                    (self.ox + self.term.wx) as usize,
-                );
+                let line = line.uslice(self.ox, self.ox + self.term.wx);
                 self.term.write(line.as_bytes())?;
             } else {
                 self.term.write(b"~")?;
             }
             self.term.write(b"\r\n")?;
         }
-        self.term
-            .write(status.uslice(0, self.term.wx as usize).as_bytes())?;
-        for _i in status.len()..(self.term.wx as usize) {
+        self.term.write(status.uslice(0, self.term.wx).as_bytes())?;
+        for _i in status.len()..self.term.wx {
             self.term.write(b" ")?;
         }
         self.term
