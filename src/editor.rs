@@ -13,6 +13,12 @@ pub struct Exit;
 
 #[derive(Debug)]
 pub struct Editor {
+    // Frontend
+    term: Terminal,
+
+    // Buffer / window with active file
+    fname: String,
+    lines: Vec<String>,
     // Cursor position (in file)
     cx: u32,
     cy: u32,
@@ -20,8 +26,8 @@ pub struct Editor {
     ox: u32,
     oy: u32,
 
-    term: Terminal,
-    lines: Vec<String>,
+    // Status line
+    message: String,
 }
 
 impl Editor {
@@ -33,6 +39,8 @@ impl Editor {
             oy: 0,
             term: term,
             lines: Vec::new(),
+            message: String::from(format!("rk v{}", VERSION)),
+            fname: String::from("*scratch*"),
         }
     }
 
@@ -66,6 +74,9 @@ impl Editor {
         let file = io::BufReader::new(File::open(fname)?);
         for line in file.lines().map(|l| l.unwrap()) {
             self.lines.push(line);
+        }
+        if let Some(bname) = fname.file_name() {
+            self.fname = String::from(bname.to_str().unwrap());
         }
         Ok(())
     }
@@ -182,7 +193,13 @@ impl Editor {
             self.ox = self.cx - self.term.wx + 1;
         }
 
-        let status = format!("? ~~  rk v{}  ~~", VERSION);
+        let status = format!(
+            "? {fname} {line}:{col} -- {message}",
+            fname = self.fname,
+            col = self.cx,
+            line = self.cy + 1,
+            message = self.message,
+        );
         self.term.hide_cursor()?;
         self.term.move_cursor_topleft()?;
         for y in 0..(self.term.wy - 1) {
