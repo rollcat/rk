@@ -3,9 +3,10 @@ use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 
-use keys::Direction::*;
-use keys::*;
-use tty::Terminal;
+use termion::event::{Event, Key};
+
+
+use tty;
 use utils::*;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -13,9 +14,17 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub struct Exit;
 
 #[derive(Debug)]
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+#[derive(Debug)]
 pub struct Editor {
     // Frontend
-    term: Terminal,
+    term: tty::Terminal,
 
     // Buffer / window with active file
     fname: String,
@@ -32,7 +41,7 @@ pub struct Editor {
 }
 
 impl Editor {
-    pub fn new(term: Terminal) -> Editor {
+    pub fn new(term: tty::Terminal) -> Editor {
         Editor {
             cx: 0,
             cy: 0,
@@ -46,15 +55,14 @@ impl Editor {
     }
 
     pub fn init(&mut self) -> io::Result<()> {
-        self.term.enable_raw_mode()?;
-        self.term.update_window_size()?;
+        self.term.update()?;
         self.term.clear_screen()?;
         self.update_screen()?;
         Ok(())
     }
 
     pub fn update(&mut self) -> io::Result<Option<Exit>> {
-        self.term.update_window_size()?;
+        self.term.update()?;
 
         let cmd = self.update_input()?;
         let status = self.exec_cmd(cmd)?;
@@ -64,8 +72,13 @@ impl Editor {
     }
 
     pub fn deinit(&mut self) -> io::Result<()> {
-        self.term.move_cursor_topleft()?;
-        self.term.disable_raw_mode()?;
+        write!(
+            self.term,
+            "{}{}{}",
+            termion::clear::All,
+            termion::style::Reset,
+            termion::cursor::Goto(1, 1)
+        )?;
         Ok(())
     }
 
@@ -81,45 +94,30 @@ impl Editor {
     }
 
     fn update_input(&mut self) -> io::Result<Command> {
-        let km = self.term.get_key()?;
-        let KeyMod {
-            key,
-            ctrl,
-            meta,
-            shift,
-        } = km;
+        let ev = self.term.get_event()?;
         self.message = String::from(format!("rk v{}", VERSION));
-        let cmd = match (ctrl, meta, shift, key) {
-            (true, false, false, Key::Char('q')) => Command::Exit,
-            (false, true, _, Key::Char('Q')) => panic!("forced a panic"),
-            (false, false, _, Key::Direction(d)) => Command::Move(d),
-            (true, false, _, Key::Direction(d)) => match d {
-                Direction::Up => Command::MovePageUp,
-                Direction::Down => Command::MovePageDown,
-                Direction::Left => Command::MoveLineHome,
-                Direction::Right => Command::MoveLineEnd,
+        let cmd = match ev {
+            Event::Key(k) => match k {
+                Key::Ctrl('q') => Command::Exit,
+                Key::Alt('Q') => panic!("forced a panic"),
+                Key::Up => Command::Move(Direction::Up),
+                Key::Down => Command::Move(Direction::Down),
+                Key::Left => Command::Move(Direction::Left),
+                Key::Right => Command::Move(Direction::Right),
+                Key::Char(ch) => Command::InsertCharacter(ch),
+                Key::Ctrl('m') => Command::InsertCharacter('\n'),
+                Key::PageUp => Command::MovePageUp,
+                Key::PageDown => Command::MovePageDown,
+                Key::Home => Command::MoveLineHome,
+                Key::End => Command::MoveLineEnd,
+                Key::Backspace => Command::Erase(Direction::Left),
+                Key::Delete => Command::Erase(Direction::Right),
+                _ => {
+                    self.message = format!("key not bound: {:?}", ev,);
+                    Command::Nothing
+                }
             },
-            (false, false, _, Key::Char(ch)) => Command::InsertCharacter(ch),
-            (true, false, _, Key::Char('m')) => Command::InsertCharacter('\n'),
-            (false, false, _, Key::PageUp) => Command::MovePageUp,
-            (false, false, _, Key::PageDown) => Command::MovePageDown,
-            (false, false, _, Key::Home) => Command::MoveLineHome,
-            (false, false, _, Key::End) => Command::MoveLineEnd,
-            (false, false, _, Key::Backspace) => Command::Erase(Left),
-            (false, false, _, Key::Delete) => Command::Erase(Right),
-            (_, _, _, Key::None) => Command::Nothing,
-            (_, _, _, key) => {
-                self.message = format!(
-                    "key not bound: {:?}",
-                    KeyMod {
-                        key,
-                        ctrl,
-                        meta,
-                        shift,
-                    }
-                );
-                Command::Nothing
-            }
+            _ => Command::Nothing,
         };
         Ok(cmd)
     }
@@ -195,14 +193,14 @@ impl Editor {
                 newline.push(ch);
                 newline.push_str(&line.uslice(self.cx, len));
                 self.lines[self.cy] = newline;
-                self.exec_cmd_move(Right);
+                self.exec_cmd_move(Direction::Right);
             }
         }
     }
 
     fn exec_cmd_erase(&mut self, d: Direction) {
         match d {
-            Left => {
+            Direction::Left => {
                 if self.cx == 0 {
                     if self.cy == 0 {
                         // top left, do nothing
@@ -225,10 +223,10 @@ impl Editor {
                     newline.push_str(&line.uslice(0, self.cx - 1));
                     newline.push_str(&line.uslice(self.cx, len));
                     self.lines[self.cy] = newline;
-                    self.exec_cmd_move(Left);
+                    self.exec_cmd_move(Direction::Left);
                 }
             }
-            Right => {
+            Direction::Right => {
                 // todo
             }
             _ => {} // noop
