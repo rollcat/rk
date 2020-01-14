@@ -6,6 +6,7 @@ use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::Path;
 
 mod editor;
+mod tests;
 mod tty;
 mod utils;
 
