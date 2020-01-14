@@ -128,7 +128,7 @@ impl Editor {
                     Command::MoveTo((x - 1) as usize, (y - 1) as usize)
                 }
             },
-            _ => Command::Nothing,
+            Event::Unsupported(_) => Command::Nothing,
         };
         Ok(cmd)
     }
