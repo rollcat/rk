@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 
+use termion::color;
 use termion::event::{Event, Key, MouseEvent};
 
 use tty;
@@ -290,15 +291,32 @@ impl Editor {
                 let line = &self.lines[filerow];
                 let line = line.uslice(self.ox, self.ox + self.term.wx);
                 self.term.write(line.as_bytes())?;
+                self.term.write(
+                    format!("{}\r\n", color::Fg(color::Reset)).as_bytes(),
+                )?;
             } else {
-                self.term.write(b"~")?;
+                self.term.write(
+                    format!(
+                        "{}~{}\r\n",
+                        color::Fg(color::Blue),
+                        color::Fg(color::Reset)
+                    )
+                    .as_bytes(),
+                )?;
             }
-            self.term.write(b"\r\n")?;
         }
+        self.term.write(
+            format!("{}{}", color::Bg(color::Blue), color::Fg(color::Black))
+                .as_bytes(),
+        )?;
         self.term.write(status.uslice(0, self.term.wx).as_bytes())?;
         for _i in status.ulen()..self.term.wx {
             self.term.write(b" ")?;
         }
+        self.term.write(
+            format!("{}{}", color::Bg(color::Reset), color::Fg(color::Reset))
+                .as_bytes(),
+        )?;
         self.term
             .move_cursor(self.cx - self.ox, self.cy - self.oy)?;
         self.term.show_cursor()?;
