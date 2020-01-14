@@ -106,7 +106,7 @@ impl Terminal {
                     ('7', '^') => KeyMod::new_ctrl(Key::Home),
                     ('8', '^') => KeyMod::new_ctrl(Key::End),
                     _ => {
-                        eprintln!("buf: {:?}", buf);
+                        // eprintln!("buf: {:?}", buf);
                         KeyMod::new_none()
                     }
                 }
@@ -122,7 +122,7 @@ impl Terminal {
                 }
             }
             _ => {
-                eprintln!("buf: {:?}", buf);
+                // eprintln!("buf: {:?}", buf);
                 KeyMod::new_none()
             }
         })

@@ -39,7 +39,7 @@ impl Editor {
             oy: 0,
             term: term,
             lines: Vec::new(),
-            message: String::from(format!("rk v{}", VERSION)),
+            message: String::new(),
             fname: String::from("*scratch*"),
         }
     }
@@ -59,10 +59,6 @@ impl Editor {
         let status = self.exec_cmd(cmd)?;
         self.scroll_to_cursor();
         self.update_screen()?;
-        eprintln!(
-            "editor: {{ cx: {}, cy: {}, ox: {}, oy: {} }}",
-            self.cx, self.cy, self.ox, self.oy
-        );
         Ok(status)
     }
 
@@ -85,13 +81,13 @@ impl Editor {
 
     fn update_input(&mut self) -> io::Result<Command> {
         let km = self.term.get_key()?;
-        eprintln!("key: {:?}", km);
         let KeyMod {
             key,
             ctrl,
             meta,
             shift,
         } = km;
+        self.message = String::from(format!("rk v{}", VERSION));
         let cmd = match (ctrl, meta, shift, key) {
             (true, false, false, Key::Char('q')) => Command::Exit,
             (false, true, _, Key::Char('Q')) => panic!("forced a panic"),
@@ -109,9 +105,10 @@ impl Editor {
             (false, false, _, Key::End) => Command::MoveLineEnd,
             (false, false, _, Key::Backspace) => Command::Erase(Left),
             (false, false, _, Key::Delete) => Command::Erase(Right),
+            (_, _, _, Key::None) => Command::Nothing,
             (_, _, _, key) => {
-                eprintln!(
-                    "unhandled: {:?}",
+                self.message = format!(
+                    "key not bound: {:?}",
                     KeyMod {
                         key,
                         ctrl,
@@ -132,8 +129,8 @@ impl Editor {
                 self.update_screen()?;
                 return Ok(Some(Exit));
             }
-            Command::InsertCharacter(ch) => {
-                eprintln!("typing: {}", ch);
+            Command::InsertCharacter(_ch) => {
+                // eprintln!("typing: {}", ch);
             }
             Command::Move(d) => match d {
                 Direction::Left => {
@@ -219,7 +216,11 @@ impl Editor {
             }
             self.term.write(b"\r\n")?;
         }
-        self.term.write(status.as_bytes())?;
+        self.term
+            .write(status.uslice(0, self.term.wx as usize).as_bytes())?;
+        for _i in status.len()..(self.term.wx as usize) {
+            self.term.write(b" ")?;
+        }
         self.term
             .move_cursor(self.cx - self.ox, self.cy - self.oy)?;
         self.term.show_cursor()?;

@@ -31,8 +31,8 @@ fn main() {
         }
     }));
     e.deinit().unwrap();
-    eprintln!("e: {:?}", e);
     if let Err(err) = r {
+        eprintln!("e: {:?}", e);
         resume_unwind(err);
     };
 }
