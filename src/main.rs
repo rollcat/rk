@@ -1,17 +1,28 @@
 extern crate termion;
 
+use std::boxed::Box;
 use std::env;
+use std::error::Error;
 use std::io;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::Path;
+use std::result::Result;
 
 mod editor;
 mod tests;
 mod tty;
 mod utils;
 
-fn main() -> io::Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
+
+    if !termion::is_tty(&io::stdin()) {
+        return Err("Standard input is not a TTY.".into());
+    }
+    if !termion::is_tty(&io::stdout()) {
+        return Err("Standard output is not a TTY.".into());
+    }
+
     let t = tty::Terminal::new(io::stdin(), io::stdout())?;
     let mut e = editor::Editor::new(t);
 
