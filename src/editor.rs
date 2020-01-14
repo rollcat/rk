@@ -1,9 +1,9 @@
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 
-use termion::event::{Event, Key};
+use termion::event::{Event, Key, MouseEvent};
 
 use tty;
 use utils::*;
@@ -116,6 +116,17 @@ impl Editor {
                     Command::Nothing
                 }
             },
+            Event::Mouse(m) => match m {
+                MouseEvent::Press(_, x, y) => {
+                    Command::MoveTo((x - 1) as usize, (y - 1) as usize)
+                }
+                MouseEvent::Release(x, y) => {
+                    Command::MoveTo((x - 1) as usize, (y - 1) as usize)
+                }
+                MouseEvent::Hold(x, y) => {
+                    Command::MoveTo((x - 1) as usize, (y - 1) as usize)
+                }
+            },
             _ => Command::Nothing,
         };
         Ok(cmd)
@@ -134,19 +145,22 @@ impl Editor {
             Command::Move(d) => {
                 self.exec_cmd_move(d);
             }
+            Command::MoveTo(x, y) => {
+                self.exec_cmd_move_to(x, y);
+            }
             Command::MovePageUp => {
                 self.cx = 0;
-                self.cy = 0;
+                self.cy = max(0, self.cy - self.term.wy);
             }
             Command::MovePageDown => {
                 self.cx = 0;
-                self.cy = self.term.wy - 1;
+                self.cy = min(self.lines.len() - 1, self.cy + self.term.wy);
             }
             Command::MoveLineHome => {
                 self.cx = 0;
             }
             Command::MoveLineEnd => {
-                self.cx = self.term.wx - 1;
+                self.cx = self.lines[self.cy].ulen() - 1;
             }
             Command::Erase(d) => {
                 self.exec_cmd_erase(d);
@@ -172,6 +186,11 @@ impl Editor {
         }
         self.cy = min(self.cy, self.lines.len() - 1);
         self.cx = min(self.cx, self.lines[self.cy].ulen());
+    }
+
+    fn exec_cmd_move_to(&mut self, x: usize, y: usize) {
+        self.cy = max(0, min(y, self.lines.len() - 1));
+        self.cx = max(0, min(x, self.lines[self.cy].ulen()));
     }
 
     fn exec_cmd_insert(&mut self, ch: char) {
@@ -293,6 +312,7 @@ pub enum Command {
     Nothing,
     InsertCharacter(char),
     Move(Direction),
+    MoveTo(usize, usize),
     MovePageUp,
     MovePageDown,
     MoveLineHome,

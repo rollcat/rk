@@ -2,14 +2,14 @@ use std::fmt;
 use std::io::{self, Stdin, Stdout, Write};
 
 use termion::event::Event;
-use termion::input::TermRead;
-use termion::raw::IntoRawMode;
+use termion::input::{MouseTerminal, TermRead};
+use termion::raw::{IntoRawMode, RawTerminal};
 
 pub struct Terminal {
     pub wx: usize,
     pub wy: usize,
     events: termion::input::Events<Stdin>,
-    rawterm: termion::raw::RawTerminal<Stdout>,
+    term: MouseTerminal<RawTerminal<Stdout>>,
 }
 
 impl Terminal {
@@ -18,7 +18,7 @@ impl Terminal {
             wx: 0,
             wy: 0,
             events: stdin.events(),
-            rawterm: stdout.into_raw_mode()?,
+            term: MouseTerminal::from(stdout.into_raw_mode()?),
         })
     }
 
@@ -30,18 +30,18 @@ impl Terminal {
     }
 
     pub fn clear_screen(&mut self) -> io::Result<()> {
-        write!(self.rawterm, "{}", termion::clear::All)?;
+        write!(self.term, "{}", termion::clear::All)?;
         Ok(())
     }
 
     pub fn clear_line(&mut self) -> io::Result<()> {
-        write!(self.rawterm, "{}", termion::clear::CurrentLine)?;
+        write!(self.term, "{}", termion::clear::CurrentLine)?;
         Ok(())
     }
 
     pub fn move_cursor(&mut self, x: usize, y: usize) -> io::Result<()> {
         write!(
-            self.rawterm,
+            self.term,
             "{}",
             termion::cursor::Goto(x as u16 + 1, y as u16 + 1)
         )?;
@@ -49,7 +49,7 @@ impl Terminal {
     }
 
     pub fn move_cursor_topleft(&mut self) -> io::Result<()> {
-        write!(self.rawterm, "{}", termion::cursor::Goto(1, 1))?;
+        write!(self.term, "{}", termion::cursor::Goto(1, 1))?;
         Ok(())
     }
 
@@ -58,22 +58,22 @@ impl Terminal {
     }
 
     pub fn hide_cursor(&mut self) -> io::Result<()> {
-        write!(self.rawterm, "{}", termion::cursor::Hide)?;
+        write!(self.term, "{}", termion::cursor::Hide)?;
         Ok(())
     }
 
     pub fn show_cursor(&mut self) -> io::Result<()> {
-        write!(self.rawterm, "{}", termion::cursor::Show)?;
+        write!(self.term, "{}", termion::cursor::Show)?;
         Ok(())
     }
 }
 
 impl Write for Terminal {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.rawterm.write(buf)
+        self.term.write(buf)
     }
     fn flush(&mut self) -> io::Result<()> {
-        self.rawterm.flush()
+        self.term.flush()
     }
 }
 
