@@ -100,6 +100,7 @@ impl Editor {
                 Direction::Right => Command::MoveLineEnd,
             },
             (false, false, _, Key::Char(ch)) => Command::InsertCharacter(ch),
+            (true, false, _, Key::Char('m')) => Command::InsertCharacter('\n'),
             (false, false, _, Key::PageUp) => Command::MovePageUp,
             (false, false, _, Key::PageDown) => Command::MovePageDown,
             (false, false, _, Key::Home) => Command::MoveLineHome,
@@ -182,9 +183,15 @@ impl Editor {
     fn exec_cmd_insert(&mut self, ch: char) {
         match ch {
             '\n' => {
-                // todo
+                // Take the current line, and break it in two
+                let line = self.lines[self.cy].clone();
+                self.lines[self.cy] = line.uslice(0, self.cx);
+                self.cy += 1;
+                self.lines.insert(self.cy, line.uslice(self.cx, line.len()));
+                self.cx = 0;
             }
             _ => {
+                // Insert in the middle of the current line
                 let line = &self.lines[self.cy];
                 let len = line.len();
                 let mut newline = String::with_capacity(len + 1);
