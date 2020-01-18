@@ -1,7 +1,8 @@
 // Prevent editors from interpreting "#!" as a shebang and adding +x
 // #![deny(warnings)]
 #![deny(unused_imports)]
-extern crate termion;
+extern crate crossterm;
+extern crate libc;
 
 use std::boxed::Box;
 use std::env;
@@ -20,14 +21,14 @@ mod utils;
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
 
-    if !termion::is_tty(&io::stdin()) {
+    if !tty::is_tty(&io::stdin()) {
         return Err("Standard input is not a TTY.".into());
     }
-    if !termion::is_tty(&io::stdout()) {
+    if !tty::is_tty(&io::stdout()) {
         return Err("Standard output is not a TTY.".into());
     }
 
-    let t = tty::Terminal::new(io::stdin(), io::stdout())?;
+    let t = tty::Terminal::new(io::stdout())?;
     let mut e = editor::Editor::new(t);
 
     let r = catch_unwind(AssertUnwindSafe(|| {

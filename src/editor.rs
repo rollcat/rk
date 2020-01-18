@@ -3,17 +3,27 @@ use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 
-use termion::color;
-use termion::event::{Event, Key, MouseEvent};
+use crossterm::{
+    event::{Event, KeyCode, KeyEvent, MouseEvent},
+    style,
+    terminal::{Clear, ClearType},
+    QueueableCommand,
+};
 
+use keys;
 use tty;
 use utils::*;
+
+use std::boxed::Box;
+use std::collections::HashMap;
+use std::error::Error;
+use std::result::Result;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub struct Exit;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Direction {
     Up,
     Down,
@@ -38,6 +48,24 @@ pub struct Editor {
 
     // Status line
     message: String,
+
+    // Key bindings
+    keys: HashMap<KeyEvent, Command>,
+}
+
+#[derive(Debug, Clone)]
+pub enum Command {
+    Nothing,
+    InsertCharacter(char),
+    Move(Direction),
+    MoveTo(usize, usize),
+    MovePageUp,
+    MovePageDown,
+    MoveLineHome,
+    MoveLineEnd,
+    Erase(Direction),
+    Panic(String),
+    Exit,
 }
 
 impl Editor {
@@ -51,19 +79,50 @@ impl Editor {
             lines: Vec::new(),
             message: String::new(),
             fname: String::from("*scratch*"),
+            keys: Editor::newkeys(),
         }
     }
 
-    pub fn init(&mut self) -> io::Result<()> {
-        self.term.update()?;
-        self.term.clear_screen()?;
+    fn newkeys() -> HashMap<KeyEvent, Command> {
+        let mut keys = HashMap::new();
+        keys.insert(keys::must_parse("c-q"), Command::Exit);
+        keys.insert(
+            keys::must_parse("m-q"),
+            Command::Panic("forced panic".into()),
+        );
+        keys.insert(keys::must_parse("up"), Command::Move(Direction::Up));
+        keys.insert(keys::must_parse("down"), Command::Move(Direction::Down));
+        keys.insert(keys::must_parse("left"), Command::Move(Direction::Left));
+        keys.insert(
+            keys::must_parse("right"),
+            Command::Move(Direction::Right),
+        );
+        keys.insert(keys::must_parse("a-b"), Command::Move(Direction::Left));
+        keys.insert(keys::must_parse("a-f"), Command::Move(Direction::Right));
+        keys.insert(keys::must_parse("c-m"), Command::InsertCharacter('\n'));
+        keys.insert(keys::must_parse("enter"), Command::InsertCharacter('\n'));
+        keys.insert(keys::must_parse("pageup"), Command::MovePageUp);
+        keys.insert(keys::must_parse("pagedown"), Command::MovePageDown);
+        keys.insert(keys::must_parse("home"), Command::MoveLineHome);
+        keys.insert(keys::must_parse("end"), Command::MoveLineEnd);
+        keys.insert(
+            keys::must_parse("backspace"),
+            Command::Erase(Direction::Left),
+        );
+        keys.insert(
+            keys::must_parse("delete"),
+            Command::Erase(Direction::Right),
+        );
+        keys
+    }
+
+    pub fn init(&mut self) -> Result<(), Box<dyn Error>> {
+        self.term.init()?;
         self.update_screen()?;
         Ok(())
     }
 
-    pub fn update(&mut self) -> io::Result<Option<Exit>> {
-        self.term.update()?;
-
+    pub fn update(&mut self) -> Result<Option<Exit>, Box<dyn Error>> {
         let cmd = self.update_input()?;
         let status = self.exec_cmd(cmd)?;
         self.scroll_to_cursor();
@@ -71,14 +130,8 @@ impl Editor {
         Ok(status)
     }
 
-    pub fn deinit(&mut self) -> io::Result<()> {
-        write!(
-            self.term,
-            "{}{}{}",
-            termion::clear::All,
-            termion::style::Reset,
-            termion::cursor::Goto(1, 1)
-        )?;
+    pub fn deinit(&mut self) -> Result<(), Box<dyn Error>> {
+        self.term.deinit()?;
         Ok(())
     }
 
@@ -93,51 +146,49 @@ impl Editor {
         Ok(())
     }
 
-    fn update_input(&mut self) -> io::Result<Command> {
+    fn update_input(&mut self) -> Result<Command, Box<dyn Error>> {
         let ev = self.term.get_event()?;
-        self.message = String::from(format!("rk v{}", VERSION));
-        let cmd = match ev {
-            Event::Key(k) => match k {
-                Key::Ctrl('q') => Command::Exit,
-                Key::Alt('Q') => panic!("forced a panic"),
-                Key::Up => Command::Move(Direction::Up),
-                Key::Down => Command::Move(Direction::Down),
-                Key::Left => Command::Move(Direction::Left),
-                Key::Right => Command::Move(Direction::Right),
-                Key::Alt('b') => Command::Move(Direction::Left),
-                Key::Alt('f') => Command::Move(Direction::Right),
-                Key::Char(ch) => Command::InsertCharacter(ch),
-                Key::Ctrl('m') => Command::InsertCharacter('\n'),
-                Key::PageUp => Command::MovePageUp,
-                Key::PageDown => Command::MovePageDown,
-                Key::Home => Command::MoveLineHome,
-                Key::End => Command::MoveLineEnd,
-                Key::Backspace => Command::Erase(Direction::Left),
-                Key::Delete => Command::Erase(Direction::Right),
-                _ => {
-                    self.message = format!("key not bound: {:?}", ev,);
+        self.message = String::from(format!("rk v{} ev{:?}", VERSION, ev));
+        Ok(match ev {
+            None => Command::Nothing,
+            Some(Event::Key(k)) => {
+                if let Some(cmd) = self.keys.get(&k) {
+                    cmd.clone()
+                } else {
+                    if k.modifiers.is_empty() {
+                        if let KeyCode::Char(c) = k.code {
+                            return Ok(Command::InsertCharacter(c));
+                        }
+                    }
+                    self.message =
+                        format!("key not bound: {}", keys::display(k));
                     Command::Nothing
                 }
+            }
+            Some(Event::Resize(_, _)) => Command::Nothing,
+            Some(Event::Mouse(m)) => match m {
+                MouseEvent::Down(_, x, y, _) => {
+                    Command::MoveTo(x as usize, y as usize)
+                }
+                MouseEvent::Up(_, x, y, _) => {
+                    Command::MoveTo(x as usize, y as usize)
+                }
+                MouseEvent::Drag(_, x, y, _) => {
+                    Command::MoveTo(x as usize, y as usize)
+                }
+                MouseEvent::ScrollUp(_, _, _) => Command::MovePageUp,
+                MouseEvent::ScrollDown(_, _, _) => Command::MovePageDown,
             },
-            Event::Mouse(m) => match m {
-                MouseEvent::Press(_, x, y) => {
-                    Command::MoveTo((x - 1) as usize, (y - 1) as usize)
-                }
-                MouseEvent::Release(x, y) => {
-                    Command::MoveTo((x - 1) as usize, (y - 1) as usize)
-                }
-                MouseEvent::Hold(x, y) => {
-                    Command::MoveTo((x - 1) as usize, (y - 1) as usize)
-                }
-            },
-            Event::Unsupported(_) => Command::Nothing,
-        };
-        Ok(cmd)
+        })
     }
 
-    fn exec_cmd(&mut self, cmd: Command) -> io::Result<Option<Exit>> {
+    fn exec_cmd(
+        &mut self,
+        cmd: Command,
+    ) -> Result<Option<Exit>, Box<dyn Error>> {
         match cmd {
             Command::Nothing => (),
+            Command::Panic(s) => panic!(s),
             Command::Exit => {
                 self.update_screen()?;
                 return Ok(Some(Exit));
@@ -263,7 +314,7 @@ impl Editor {
         }
     }
 
-    fn update_screen(&mut self) -> io::Result<()> {
+    fn update_screen(&mut self) -> Result<(), Box<dyn Error>> {
         if self.cy < self.oy {
             self.oy = self.cy;
         }
@@ -276,6 +327,9 @@ impl Editor {
         if self.cx >= self.ox + self.term.wx {
             self.ox = self.cx - self.term.wx + 1;
         }
+        if self.term.wy == 0 || self.term.wx == 0 {
+            return Ok(());
+        }
 
         let status = format!(
             "? {fname} {line}:{col} -- {message}",
@@ -284,59 +338,48 @@ impl Editor {
             line = self.cy + 1,
             message = self.message,
         );
-        self.term.hide_cursor()?;
-        self.term.move_cursor_topleft()?;
-        for y in 0..(self.term.wy - 1) {
-            let filerow = y + self.oy;
-            self.term.clear_line()?;
-            if filerow < self.lines.len() {
-                let line = &self.lines[filerow];
-                let line = line.uslice(self.ox, self.ox + self.term.wx);
-                self.term.write(line.as_bytes())?;
-                self.term.write(
-                    format!("{}\r\n", color::Fg(color::Reset)).as_bytes(),
-                )?;
-            } else {
-                self.term.write(
-                    format!(
-                        "{}~{}\r\n",
-                        color::Fg(color::Blue),
-                        color::Fg(color::Reset)
-                    )
-                    .as_bytes(),
-                )?;
-            }
-        }
-        self.term.write(
-            format!("{}{}", color::Bg(color::Blue), color::Fg(color::Black))
-                .as_bytes(),
-        )?;
-        self.term.write(status.uslice(0, self.term.wx).as_bytes())?;
-        for _i in status.ulen()..self.term.wx {
-            self.term.write(b" ")?;
-        }
-        self.term.write(
-            format!("{}{}", color::Bg(color::Reset), color::Fg(color::Reset))
-                .as_bytes(),
-        )?;
         self.term
-            .move_cursor(self.cx - self.ox, self.cy - self.oy)?;
-        self.term.show_cursor()?;
-        self.term.flush()?;
+            .stdout
+            .queue(crossterm::cursor::Hide)?
+            .queue(crossterm::cursor::MoveTo(0, 0))?;
+        for y in self.oy..min(self.oy + self.term.wy, self.lines.len()) {
+            let line = &self.lines[y];
+            let line = line.uslice(self.ox, self.ox + self.term.wx + 1);
+            self.term
+                .stdout
+                .queue(Clear(ClearType::CurrentLine))?
+                .queue(style::Print(line))?
+                .queue(style::Print("\r\n"))?
+                .queue(style::ResetColor)?;
+        }
+        self.term
+            .stdout
+            .queue(style::SetForegroundColor(style::Color::Blue))?;
+        for _y in min(self.oy + self.term.wy, self.lines.len())
+            ..(self.oy + self.term.wy)
+        {
+            self.term
+                .stdout
+                .queue(Clear(ClearType::CurrentLine))?
+                .queue(style::Print("~\r\n"))?;
+        }
+        self.term
+            .stdout
+            .queue(style::SetBackgroundColor(style::Color::Blue))?
+            .queue(style::SetForegroundColor(style::Color::Black))?
+            .queue(style::Print(status.uslice(0, self.term.wx)))?;
+        for _i in status.ulen()..(self.term.wx + 1) {
+            self.term.stdout.queue(style::Print(" "))?;
+        }
+        self.term
+            .stdout
+            .queue(style::ResetColor)?
+            .queue(crossterm::cursor::MoveTo(
+                (self.cx - self.ox) as u16,
+                (self.cy - self.oy) as u16,
+            ))?
+            .queue(crossterm::cursor::Show)?
+            .flush()?;
         Ok(())
     }
-}
-
-#[derive(Debug)]
-pub enum Command {
-    Nothing,
-    InsertCharacter(char),
-    Move(Direction),
-    MoveTo(usize, usize),
-    MovePageUp,
-    MovePageDown,
-    MoveLineHome,
-    MoveLineEnd,
-    Erase(Direction),
-    Exit,
 }
