@@ -12,6 +12,7 @@ use std::path::Path;
 use std::result::Result;
 
 mod editor;
+mod keys;
 mod tests;
 mod tty;
 mod utils;
