@@ -1,6 +1,3 @@
-// Prevent editors from interpreting "#!" as a shebang and adding +x
-// #![deny(warnings)]
-#![deny(unused_imports)]
 extern crate crossterm;
 extern crate libc;
 
