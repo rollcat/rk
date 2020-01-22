@@ -41,7 +41,7 @@ impl Terminal {
     }
 
     pub fn deinit(&mut self) -> DynResult<()> {
-    self.stdout
+        self.stdout
             .queue(crossterm::style::ResetColor)?
             .queue(crossterm::event::DisableMouseCapture)?
             .queue(crossterm::style::ResetColor)?

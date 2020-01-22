@@ -180,10 +180,7 @@ impl Editor {
         })
     }
 
-    fn exec_cmd(
-        &mut self,
-        cmd: Command,
-    ) -> DynResult<Option<Exit>> {
+    fn exec_cmd(&mut self, cmd: Command) -> DynResult<Option<Exit>> {
         match cmd {
             Command::Nothing => (),
             Command::Panic(s) => panic!(s),
