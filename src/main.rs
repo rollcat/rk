@@ -1,3 +1,6 @@
+// Avoid #! as chmod +x
+#![deny(bare_trait_objects)]
+
 extern crate crossterm;
 extern crate libc;
 
