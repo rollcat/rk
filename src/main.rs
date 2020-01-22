@@ -1,21 +1,19 @@
 extern crate crossterm;
 extern crate libc;
 
-use std::boxed::Box;
 use std::env;
-use std::error::Error;
 use std::io;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::Path;
-use std::result::Result;
 
 mod editor;
+mod errors;
 mod keys;
 mod tests;
 mod tty;
 mod utils;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> errors::DynResult<()> {
     let args: Vec<String> = env::args().collect();
 
     if !tty::is_tty(&io::stdin()) {
