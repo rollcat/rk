@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::cmp::{max, min};
 use std::fs::File;
 use std::io::{self, BufRead, Write};
@@ -10,10 +11,9 @@ use crossterm::{
     QueueableCommand,
 };
 
-use errors::DynResult;
-use keys;
-use tty;
-use utils::*;
+use crate::keys;
+use crate::tty;
+use crate::utils::*;
 
 use std::collections::HashMap;
 
@@ -114,13 +114,13 @@ impl Editor {
         keys
     }
 
-    pub fn init(&mut self) -> DynResult<()> {
+    pub fn init(&mut self) -> Result<()> {
         self.term.init()?;
         self.update_screen()?;
         Ok(())
     }
 
-    pub fn update(&mut self) -> DynResult<Option<Exit>> {
+    pub fn update(&mut self) -> Result<Option<Exit>> {
         let cmd = self.update_input()?;
         let status = self.exec_cmd(cmd)?;
         self.scroll_to_cursor();
@@ -128,7 +128,7 @@ impl Editor {
         Ok(status)
     }
 
-    pub fn deinit(&mut self) -> DynResult<()> {
+    pub fn deinit(&mut self) -> Result<()> {
         self.term.deinit()?;
         Ok(())
     }
@@ -144,7 +144,7 @@ impl Editor {
         Ok(())
     }
 
-    fn update_input(&mut self) -> DynResult<Command> {
+    fn update_input(&mut self) -> Result<Command> {
         let ev = self.term.get_event()?;
         self.message = String::from(format!("rk v{} ev{:?}", VERSION, ev));
         Ok(match ev {
@@ -180,10 +180,10 @@ impl Editor {
         })
     }
 
-    fn exec_cmd(&mut self, cmd: Command) -> DynResult<Option<Exit>> {
+    fn exec_cmd(&mut self, cmd: Command) -> Result<Option<Exit>> {
         match cmd {
             Command::Nothing => (),
-            Command::Panic(s) => panic!(s),
+            Command::Panic(s) => panic!("{}", s),
             Command::Exit => {
                 self.update_screen()?;
                 return Ok(Some(Exit));
@@ -309,7 +309,7 @@ impl Editor {
         }
     }
 
-    fn update_screen(&mut self) -> DynResult<()> {
+    fn update_screen(&mut self) -> Result<()> {
         if self.cy < self.oy {
             self.oy = self.cy;
         }

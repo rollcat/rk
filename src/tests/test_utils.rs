@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use utils::*;
+    use crate::utils::*;
 
     #[test]
     fn test_uslice_basic() {

@@ -1,29 +1,26 @@
 // Avoid #! as chmod +x
 #![deny(bare_trait_objects)]
 
-extern crate crossterm;
-extern crate libc;
-
+use anyhow::{anyhow, Result};
 use std::env;
 use std::io;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::Path;
 
 mod editor;
-mod errors;
 mod keys;
 mod tests;
 mod tty;
 mod utils;
 
-fn main() -> errors::DynResult<()> {
+fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
     if !tty::is_tty(&io::stdin()) {
-        return Err("Standard input is not a TTY.".into());
+        return Err(anyhow!("Standard input is not a TTY."));
     }
     if !tty::is_tty(&io::stdout()) {
-        return Err("Standard output is not a TTY.".into());
+        return Err(anyhow!("Standard output is not a TTY."));
     }
 
     let t = tty::Terminal::new(io::stdout())?;

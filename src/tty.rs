@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 use std::fmt;
 use std::io::{Stdout, Write};
 use std::time::Duration;
@@ -7,8 +9,6 @@ use crossterm::{
     terminal::{Clear, ClearType},
     QueueableCommand,
 };
-
-use errors::DynResult;
 
 pub struct Terminal {
     pub wx: usize,
@@ -22,7 +22,7 @@ pub fn is_tty<T: std::os::unix::io::AsRawFd>(stream: &T) -> bool {
 }
 
 impl Terminal {
-    pub fn new(stdout: Stdout) -> DynResult<Terminal> {
+    pub fn new(stdout: Stdout) -> Result<Terminal> {
         let (x, y) = crossterm::terminal::size()?;
         Ok(Terminal {
             wx: x as usize - 1,
@@ -31,7 +31,7 @@ impl Terminal {
         })
     }
 
-    pub fn init(&mut self) -> DynResult<()> {
+    pub fn init(&mut self) -> Result<()> {
         crossterm::terminal::enable_raw_mode()?;
         self.stdout
             .queue(Clear(ClearType::All))?
@@ -40,7 +40,7 @@ impl Terminal {
         Ok(())
     }
 
-    pub fn deinit(&mut self) -> DynResult<()> {
+    pub fn deinit(&mut self) -> Result<()> {
         self.stdout
             .queue(crossterm::style::ResetColor)?
             .queue(crossterm::event::DisableMouseCapture)?
@@ -52,7 +52,7 @@ impl Terminal {
         Ok(())
     }
 
-    pub fn get_event(&mut self) -> DynResult<Option<Event>> {
+    pub fn get_event(&mut self) -> Result<Option<Event>> {
         if event::poll(Duration::from_millis(1000))? {
             match event::read()? {
                 Event::Resize(w, h) => {

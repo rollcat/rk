@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use crate::keys::*;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-    use keys::*;
 
     #[test]
     fn test_parse_nomod() {
