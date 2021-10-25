@@ -84,4 +84,29 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn test_parse_nonalnum() {
+        assert_eq!(
+            parse("enter"),
+            Some(KeyEvent {
+                code: KeyCode::Enter,
+                modifiers: KeyModifiers::empty(),
+            })
+        );
+        assert_eq!(
+            parse("Backspace"),
+            Some(KeyEvent {
+                code: KeyCode::Backspace,
+                modifiers: KeyModifiers::empty(),
+            })
+        );
+        assert_eq!(
+            parse("c-f3"),
+            Some(KeyEvent {
+                code: KeyCode::F(3),
+                modifiers: KeyModifiers::CONTROL,
+            })
+        );
+    }
 }

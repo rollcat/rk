@@ -4,23 +4,24 @@ fn _parse_code(s: &str) -> Option<KeyCode> {
     match s.len() {
         0 => None,
         1 => Some(KeyCode::Char(s.chars().next().expect("s.len"))),
-        _ => match s {
+        _ => match s.to_ascii_lowercase().as_str() {
             "up" => Some(KeyCode::Up),
             "down" => Some(KeyCode::Down),
             "left" => Some(KeyCode::Left),
             "right" => Some(KeyCode::Right),
-            "pageup" => Some(KeyCode::PageUp),
-            "pagedown" => Some(KeyCode::PageDown),
+            "pageup" | "page-up" => Some(KeyCode::PageUp),
+            "pagedown" | "page-down" => Some(KeyCode::PageDown),
             "home" => Some(KeyCode::Home),
             "end" => Some(KeyCode::End),
             "backspace" => Some(KeyCode::Backspace),
-            "delete" => Some(KeyCode::Delete),
-            "insert" => Some(KeyCode::Insert),
+            "del" | "delete" => Some(KeyCode::Delete),
+            "ins" | "insert" => Some(KeyCode::Insert),
             "enter" => Some(KeyCode::Enter),
             "tab" => Some(KeyCode::Tab),
-            "backtab" => Some(KeyCode::BackTab),
-            "esc" => Some(KeyCode::Esc),
+            "backtab" | "back-tab" => Some(KeyCode::BackTab),
+            "esc" | "escape" => Some(KeyCode::Esc),
             _ => {
+                // f1-f12 (f0-f255)
                 if s.chars().next().expect("s.len") == 'f' {
                     match s[1..].parse::<u8>() {
                         Ok(i) => Some(KeyCode::F(i)),
